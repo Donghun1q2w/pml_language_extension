@@ -145,8 +145,8 @@ class GeneralAttachedMethods {
         else
             type = attributetable.filter( methods => chkatt(variableName, methods.name.trim().toLowerCase()))[0].object;
         
-        const filteredMethods = dictionary.filter(methods => methods.library.toLowerCase() === type.toLowerCase());
-        let Methods = (filteredMethods[0].methods).map(method => {
+        let filteredMethods = (dictionary as any).filter((methods: { library: string; }) => methods.library.toLowerCase() === type.toLowerCase());
+        let Methods = (filteredMethods[0].methods).map((method: { label: string; snippet: string | undefined; md: string | undefined; }) => {
 
             let item = new vscode.CompletionItem(method.label, vscode.CompletionItemKind.Method);
 
@@ -184,8 +184,8 @@ class GeneralMethods {
         else if (variableName.toLowerCase()==='this')return;
         var variables:varString[]=parseKeys();
         let vatype = variables.filter( variable => variable.name === variableName.toLowerCase().replace('this.',''));
-        const filteredGeneralMethods = dictionary.filter(methods => methods.library.toLowerCase() === vatype[0].type.toLowerCase());
-        let Methods = (filteredGeneralMethods[0].methods).map(method => {
+        const filteredGeneralMethods = (dictionary as any).filter((methods: { library: string; }) => methods.library.toLowerCase() === vatype[0].type.toLowerCase());
+        let Methods = (filteredGeneralMethods[0].methods).map((method: { label: string; snippet: string | undefined; md: string | undefined; }) => {
 
             let item = new vscode.CompletionItem(method.label, vscode.CompletionItemKind.Method);
 
@@ -221,223 +221,451 @@ class VariableMethods {
         });
     }
 }
+function contains(target:string, pattern: any[]){
+    let value:boolean = false;
+    pattern.forEach(function(word){
+        if(target.includes(word)){
+            value = true;
+        }
+        else
+            value = value;
+    });
+    return value;
+}
+function starts(target:string, pattern: any[]){
+    let value:boolean = false;
+    pattern.forEach(function(word){
+        if(target.startsWith(word)){
+            value = true;
+        }
+        else
+            value = value;
+    });
+    return value;
+}
+function HasMember(line:string, ObjectList: string | any[]){
+    let result:string = '';
+    for( let i = 0; i<ObjectList.length;i++)
+    {
+        if(line.endsWith( 'is'+ObjectList[i]))return ObjectList[i];
+    }
+    return result;
+}
+function HasVarialbe(line:string, variable:string , ObjectList: string | any[]){
+    let result:string = '';
+    for( let i = 0; i<ObjectList.length;i++)
+    {
+        if(line.startsWith('!'+variable+'=')&&line.endsWith(ObjectList[i]))return ObjectList[i];
+        else if(line.startsWith('!!'+variable+'=')&&line.endsWith(ObjectList[i]))return ObjectList[i];
+    }
+    return result;
+}
 
 class varString{ name: string=""; type: string = ""; from: Number=0   ; to: Number| null=null; global: Boolean=false;}
 function parseKeys():varString[] {
     var aa :varString[] = [];
     if (!vscode.window.activeTextEditor) return aa; // no editor
-    
     let {
         document
     } = vscode.window.activeTextEditor;
-
-    var lines = document.lineCount;
-
     var varString: varString;
     var variables: any[] = [];
-    let objectlist = dictionary.map(dic=>dic.library);
-    for (let l = 0; l < lines; l++) {
-        var lineContent = document.lineAt(l).text
-        //replace consecutive spaces with one space
-        lineContent = lineContent.replace(/[ ]{2,}/g, '');
-        if (lineContent.includes('=')&&!lineContent.includes(' =')) lineContent = lineContent.replace("=", " =");
-        var lineCompressed = lineContent.toLowerCase().replace( /(\s*)/g,"");
-        if(lineCompressed.includes('$*')) lineCompressed = lineCompressed.split('$')[0];
-        if (lineCompressed=="") continue;
-        // Disregards commented lines
-        if (!lineContent.startsWith('--')) {
-            var regex = /(?:^|[^!])!+(\w+)/g;
-            var regexmem = /member.\w+/g;
-            var match;
-            var type = "";
-            var from = 0;
-            var global;
-            if (lineCompressed.toLowerCase().startsWith('define ') || lineContent.toLowerCase().startsWith('endmethod')) {
-
-                variables.forEach(function (variable) {
-                    if (variable.to === null) {
-                        variable.to = l;
-                    }
-                });
-            }
-            while(match = regexmem.exec(lineCompressed))
-            {
-                if(match)
-                {
-                    var variableName = match[0]
-                    var filterredObject = objectlist.filter(objects=>
-                        lineCompressed.includes( variableName )
-                        &&variableName.endsWith('is'+objects.toLowerCase())
-                        );
-                    if (filterredObject.length > 0) type = filterredObject[0]
-                    variables = AssignVar( variableName.replace('member.','').replace('is'+type.toLowerCase(),''),type , from , lines ,true, variables);
+    let objectlist = (dictionary as any).map((dic: { library: any; })=>dic.library);
+    var lines = document.getText().split('\n')
+    .filter(line=>{
+        const fil = ['--' , '$*' , '$(' , ')$' , 'using' ];
+        return !starts(line.trim() , fil) && line.trim() != "";
+    } )
+    .map(line=>{
+        var linec = line.trim().toLowerCase().replace(/[ ]{2,}/g, '').replace( /\s+/g , '' );
+        if(linec.includes('$*'))
+            return linec.split('$')[0];
+        return linec;
+    });
+    const fil = ['--' , '$*' , '$(' , ')$' , 'if' , 'handle' , 'endif' ,'endhandle' , 'else'];
+    var regex = /(?:^|[^!])!+(\w+)/g;
+    var regexmem = /member.\w+/g;
+    for (let l = 0; l < lines.length; l++) {
+        var lineContent = lines[l];
+        if(starts(lineContent , fil) || lineContent == "") continue;
+        var match;
+        var type = '';
+        var from = 0;
+        var global;
+        if (lineContent.startsWith('define ') || lineContent.startsWith('endmethod')) {
+            variables.forEach(function (variable) {
+                if (variable.to === null) {
+                    variable.to = l;
                 }
-            }
-            while (match = regex.exec(lineContent.toLowerCase().replace('this.' , ''))) {
-                if (match) {
-
-                    var to = null;
-                    from = l;
-                    var variableName = match[1].toLowerCase().replace( /(\s*)/g,"");
-                    //set the global variable valid up to the end of the file
-                    if (lineContent.includes('!!' + match[1])) {
-                        global = true;
-                        to = lines;
-                    } else {
-                        global = false;
-                    }
-
-                    var ArrayRegex = new RegExp("!" + match[1].toLowerCase() + "\\[\\$*!*\\w*\\d*\\]", 'g');
-                    var RealRegex = new RegExp("!" + match[1].toLowerCase() + "\\s*=\\s*\\d+$", 'g');
-                    var filterredObject = objectlist.filter(objects=>
-                        lineCompressed.includes( '!' + variableName + '=object' + objects.toLowerCase() + '(')
-                        ||lineCompressed.includes( '!' + variableName + 'is' +objects.toLowerCase())
-                        ||lineCompressed.includes( 'member.' + variableName + 'is' +objects.toLowerCase())
-                        );
-                    if (filterredObject.length > 0) type = filterredObject[0];
-
-                    if( type == "")
-                    {
-                        if (lineCompressed.includes('!' + variableName + '=array(')
-                        || /=\s*!!collectall\w+\s*\([\s|\w,'()!*]*\)$/g.test(lineCompressed)
-                        || (lineCompressed.startsWith('!' + variableName + '=')&&methodtable.filter(method=>method.object.toLocaleLowerCase()=="array"&&chkmethod(lineCompressed,method.name)).length>0)
-                        || (lineCompressed.startsWith('!' + variableName + '=')&&attributetable.filter(attribute=>attribute.object.toLocaleLowerCase()=="array"&&chkatt(lineCompressed,attribute.name.toLocaleLowerCase())).length>0)
-                        || ArrayRegex.exec(lineCompressed)
-                        || lineCompressed.includes('var!' + variableName + 'coll')
-                        || lineCompressed.includes('var!' + variableName + 'eval')
-                        ) {
-                            type = "array";
-                        }
-                        else if (lineCompressed.includes('!' + variableName + '=true')
-                        || lineCompressed.includes('!' + variableName + '=false')
-                        || (lineCompressed.startsWith('!' + variableName + '=')&&methodtable.filter(method=>method.object.toLocaleLowerCase()=="boolean"&&chkmethod(lineCompressed,method.name)).length>0)
-                        || (lineCompressed.startsWith('!' + variableName + '=')&&attributetable.filter(attribute=>attribute.object.toLocaleLowerCase()=="boolean"&&chkatt(lineCompressed,attribute.name.toLocaleLowerCase())).length>0)
-                        ) {
-                            type = "boolean";
-                        }
-                        else if (lineCompressed.includes('!' + variableName + 'isstring')
-                        || lineCompressed.includes(variableName + "='")
-                        || lineCompressed.includes(variableName + "=|")
-                        || lineCompressed.includes(variableName + "=string")
-                        || lineCompressed.includes(variableName + "=nam")
-                        || lineCompressed.includes(variableName + "=desc")
-                        || lineCompressed.includes(variableName + "=purp")
-                        || lineCompressed.includes(variableName + "=func")
-                        || lineCompressed.includes(variableName + "=type")
-                        || lineCompressed.includes(variableName + "=fprop")
-                        || (lineCompressed.startsWith('!' + variableName + '=')&&methodtable.filter(method=>method.object.toLocaleLowerCase()=="string"&&chkmethod(lineCompressed,method.name)).length>0)
-                        || (lineCompressed.startsWith('!' + variableName + '=')&&attributetable.filter(attribute=>attribute.object.toLocaleLowerCase()=="string"&&chkatt(lineCompressed,attribute.name.toLocaleLowerCase())).length>0)
-                        || lineCompressed.includes('var!' + variableName)
-                        ) {
-                            type = "string";
-                        }
-                        else if (lineCompressed.includes('!' + variableName + 'isgadget')) {
-                            type = "gadget";
-                        }
-                        else if (lineCompressed.includes('!' + variableName + 'isreal')
-                        || RealRegex.exec(lineContent)
-                        ||lineCompressed.includes('!' + variableName + 'real')
-                        || (lineCompressed.startsWith('!' + variableName + '=')&&methodtable.filter(method=>method.object.toLocaleLowerCase()=="real"&&chkmethod(lineCompressed,method.name)).length>0)
-                        || (lineCompressed.startsWith('!' + variableName + '=')&&attributetable.filter(attribute=>attribute.object.toLocaleLowerCase()=="real"&&chkatt(lineCompressed,attribute.name.toLocaleLowerCase())).length>0)
-                        ) {
-                            type = "real";
-                        }
-                        else if (lineCompressed.includes('!' + variableName + 'isany')) {
-                            type = "any";
-                        }
-                        else if (lineCompressed.includes('!' + variableName + '=currentproject')) {
-                            type = "project";
-                        }
-                        else if ((lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith(".position"))
-                        || (lineCompressed.startsWith('!' + variableName + '=')&&methodtable.filter(method=>method.object.toLocaleLowerCase()=="position"&&chkmethod(lineCompressed,method.name)).length>0)
-                        || (lineCompressed.startsWith('!' + variableName + '=')&&attributetable.filter(attribute=>attribute.object.toLocaleLowerCase()=="position"&&chkatt(lineCompressed,attribute.name.toLocaleLowerCase())).length>0)
-                        ||(lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith(".pos.wrt(world)"))
-                        ||(lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith(".pos"))
-                        ||(lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith("isposition"))
-                        ||(lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith("startwrt/*"))
-                        ||(lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith("endwrt/*"))
-                        ||(lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith("poswrt/*"))
-                        ||(lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith("posewrt/*"))
-                        ||(lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith("posswrt/*"))
-                        ) {
-                            type = "position";
-                        }
-                        else if ( lineCompressed.includes(variableName + "=ce")
-                        || lineCompressed.includes(variableName + "=ref")
-                        || lineCompressed.includes(variableName + "=/")
-                        || (lineCompressed.startsWith('!' + variableName + '=')&&methodtable.filter(method=>method.object.toLocaleLowerCase()=="dbref"&&chkmethod(lineCompressed,method.name)).length>0)
-                        || (lineCompressed.startsWith('!' + variableName + '=')&&attributetable.filter(attribute=>attribute.object.toLocaleLowerCase()=="dbref"&&chkatt(lineCompressed,attribute.name.toLocaleLowerCase())).length>0)
-                        || (lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith("!!ce"))
-                        || lineCompressed.includes(variableName + "=own")
-                        || lineCompressed.includes(variableName + "=pre")
-                        || lineCompressed.includes(variableName + "=site")
-                        || lineCompressed.includes(variableName + "=zone")
-                        || lineCompressed.includes(variableName + "=rest")
-                        || lineCompressed.includes(variableName + "=stru")
-                        || lineCompressed.includes(variableName + "=hang")
-                        || lineCompressed.includes(variableName + "=nex")
-                        || /=\s*!!collectall\w*\s*\([\s|\w,'()!?*]*\)\[\$*!*\d*\w*\]$/g.test(lineCompressed)
-                        || lineCompressed.includes(variableName + "=dbref(")
-                        ){
-                            type = "DBRef";
-                        }
-                        else if ( lineCompressed.includes(variableName + "=orientation'")
-                        || (lineCompressed.startsWith('!' + variableName + '=')&&methodtable.filter(method=>method.object.toLocaleLowerCase()=="orientation"&&chkmethod(lineCompressed,method.name)).length>0)
-                        || (lineCompressed.startsWith('!' + variableName + '=')&&attributetable.filter(attribute=>attribute.object.toLocaleLowerCase()=="orientation"&&chkatt(lineCompressed,attribute.name.toLocaleLowerCase())).length>0)
-                        || (lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith("orientation"))
-                        || lineCompressed.includes(variableName + "=own")
-                        || lineCompressed.includes(variableName + "=pre")
-                        || lineCompressed.includes(variableName + "=nex")
-                        || lineCompressed.includes(variableName + "=oriwrt")
-                        || lineCompressed.includes(variableName + "=orientationwrt")
-                        ){
-                            type = "orientation";
-                        }
-                        else if ( lineCompressed.includes(variableName + "=currentsession'")
-                        ){
-                            type = "session";
-                        }
-                    }
-                    variables = AssignVar( variableName ,type , from , to ,global, variables);
-                }
-            }
-            while (match = regex.exec(lineContent)) {
-                if (match && match[1] != "this") {
-                    var to = null;
-                    from = l;
-                    //set the global variable valid up to the end of the file
-                    if (lineContent.includes('!!' + match[1])) {
-                        global = true;
-                        to = lines;
-                    } else {
-                        global = false;
-                    }
-                    var variableName = match[1].toLowerCase().replace( /(\s*)/g,"");
-                    var findvarialbe  = variables.filter(variable => (variable.name === variableName));
-                    if ( findvarialbe.length==0) continue;
-                    if ( lineCompressed.includes("=!")&& findvarialbe[0].type==""&& !lineCompressed.includes("=!this"))
-                    {
-                        var getva = lineContent.replace( ' = ' , '=' ).split('=')[1].split( ' ')[0].replace('!' ,'').replace('!' ,'')
-                        var findContainedVarialbe  = variables.filter(variable => (variable.name == getva.toLowerCase()));
-                        if(findContainedVarialbe.length==0) continue;
-                        varString = {
-                            name: variableName,
-                            type: findContainedVarialbe[0].type,
-                            from: findvarialbe[0].from,
-                            to: findvarialbe[0].to,
-                            global:findvarialbe[0].global
-                        };
-                        var filterTo = variables.filter(variable => (variable.name === varString.name && variable.to === varString.to));
-                        var varindex = variables.map(variable => variable.name).indexOf(varString.name);
-                        variables[varindex] = varString;
-                    }
-                }
-
-            }
-
+            });
         }
+        if(lineContent.startsWith('member.'))
+        {
+            type = HasMember(lineContent,objectlist);
+            if(type!='')
+                variables = AssignVar( lineContent.replace('member.','').replace('is'+type,''),type , from , lines ,true, variables);
+        }
+        while (match = regex.exec(lineContent.replace('this.' , ''))) {
+            if(type!=''||!match)continue;
+            var to = null;
+            from = l;
+            var variableName = match[1].replace( /(\s*)/g,"");
+            //set the global variable valid up to the end of the file
+            if (lineContent.includes('!!' + match[1])) {
+                global = true;
+                to = lines;
+            } else {
+                global = false;
+            }
 
+            var ArrayRegex = new RegExp("!" + match[1] + "\\[\\$*!*\\w*\\d*\\]", 'g');
+            var RealRegex = new RegExp("!" + match[1] + "\\s*=\\s*\\d+$", 'g');
+            objectlist.filter((objects: string)=>
+                lineContent.includes( '!' + variableName + '=object' + objects + '(')
+                ||lineContent.includes( '!' + variableName + 'is' +objects)
+                ||lineContent.includes( 'member.' + variableName + 'is' +objects)
+                ).forEach(function(getType: string){
+                    type = getType;
+                });
+
+            if( type == "")
+            {
+                if (lineContent.includes('!' + variableName + '=array(')
+                || /=\s*!!collectall\w+\s*\([\s|\w,'()!*]*\)$/g.test(lineContent)
+                || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="array"&&chkmethod(lineContent,method.name)))
+                || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="array"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
+                || ArrayRegex.exec(lineContent)
+                || lineContent.includes('var!' + variableName + 'coll')
+                || lineContent.includes('var!' + variableName + 'eval')
+                ) {
+                    type = "array";
+                }
+                else if (lineContent.includes('!' + variableName + '=true')
+                || lineContent.includes('!' + variableName + '=false')
+                || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="boolean"&&chkmethod(lineContent,method.name)))
+                || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="boolean"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
+                ) {
+                    type = "boolean";
+                }
+                else if (lineContent.includes(variableName + "='")
+                || contains(lineContent , [variableName + "=|" 
+                , variableName + "=string",
+                variableName + "=nam",
+                variableName + "=desc",
+                variableName + "=purp",
+                variableName + "=func",
+                variableName + "=type",
+                variableName + "=fprop"])
+                || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="string"&&chkmethod(lineContent,method.name)))
+                || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="string"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
+                || lineContent.includes('var!' + variableName)
+                ) {
+                    type = "string";
+                }
+                else if (lineContent.includes('!' + variableName + 'isgadget')) {
+                    type = "gadget";
+                }
+                else if (lineContent.includes('!' + variableName + 'isreal')
+                || RealRegex.exec(lineContent)
+                ||lineContent.includes('!' + variableName + 'real')
+                || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="real"&&chkmethod(lineContent,method.name)))
+                || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="real"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
+                ) {
+                    type = "real";
+                }
+                else if (lineContent.includes('!' + variableName + 'isany')) {
+                    type = "any";
+                }
+                else if (lineContent.includes('!' + variableName + '=currentproject')) {
+                    type = "project";
+                }
+                else if ((lineContent.startsWith('!' + variableName + '=')&&lineContent.endsWith(".position"))
+                || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="position"&&chkmethod(lineContent,method.name)))
+                || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="position"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
+                ||HasVarialbe(lineContent,variableName,['.pos.wrt(world)',
+                '.pos',
+                'isposition',
+                'startwrt/*',
+                'endwrt/*',
+                'poswrt/*',
+                'posewrt/*',
+                'posswrt/*'])
+                ){
+                    type = "position";
+                }
+                else if ( lineContent.includes(variableName + "=ce")
+                || lineContent.includes(variableName + "=ref")
+                || lineContent.includes(variableName + "=/")
+                || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="dbref"&&chkmethod(lineContent,method.name)))
+                || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="dbref"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
+                || (lineContent.startsWith('!' + variableName + '=')&&lineContent.endsWith("!!ce"))
+                || lineContent.includes(variableName + "=own")
+                || lineContent.includes(variableName + "=pre")
+                || lineContent.includes(variableName + "=site")
+                || lineContent.includes(variableName + "=zone")
+                || lineContent.includes(variableName + "=rest")
+                || lineContent.includes(variableName + "=stru")
+                || lineContent.includes(variableName + "=hang")
+                || lineContent.includes(variableName + "=nex")
+                || /=\s*!!collectall\w*\s*\([\s|\w,'()!?*]*\)\[\$*!*\d*\w*\]$/g.test(lineContent)
+                || lineContent.includes(variableName + "=dbref(")
+                ){
+                    type = "DBRef";
+                }
+                else if ( lineContent.includes(variableName + "=orientation'")
+                || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="orientation"&&chkmethod(lineContent,method.name)))
+                || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="orientation"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
+                || (lineContent.startsWith('!' + variableName + '=')&&lineContent.endsWith("orientation"))
+                || lineContent.includes(variableName + "=own")
+                || lineContent.includes(variableName + "=pre")
+                || lineContent.includes(variableName + "=nex")
+                || lineContent.includes(variableName + "=oriwrt")
+                || lineContent.includes(variableName + "=orientationwrt")
+                ){
+                    type = "orientation";
+                }
+                else if ( lineContent.includes(variableName + "=currentsession'")
+                ){
+                    type = "session";
+                }
+            }
+            variables = AssignVar( variableName ,type , from , to ,global, variables);
+        }
+        while (match = regex.exec(lineContent)) {
+            if (match && match[1] != "this") {
+                var to = null;
+                from = l;
+                //set the global variable valid up to the end of the file
+                if (lineContent.includes('!!' + match[1])) {
+                    global = true;
+                    to = lines;
+                } else {
+                    global = false;
+                }
+                var variableName = match[1].replace( /(\s*)/g,"");
+                var findvarialbe  = variables.filter(variable => (variable.name === variableName));
+                if ( findvarialbe.length==0) continue;
+                if ( lineContent.includes("=!")&& findvarialbe[0].type==""&& !lineContent.includes("=!this"))
+                {
+                    var getva = lineContent.replace( ' = ' , '=' ).split('=')[1].split( ' ')[0].replace('!' ,'').replace('!' ,'')
+                    var findContainedVarialbe  = variables.filter(variable => (variable.name == getva));
+                    if(findContainedVarialbe.length==0) continue;
+                    varString = {
+                        name: variableName,
+                        type: findContainedVarialbe[0].type,
+                        from: findvarialbe[0].from,
+                        to: findvarialbe[0].to,
+                        global:findvarialbe[0].global
+                    };
+                    var filterTo = variables.filter(variable => (variable.name === varString.name && variable.to === varString.to));
+                    var varindex = variables.map(variable => variable.name).indexOf(varString.name);
+                    variables[varindex] = varString;
+                }
+            }
+        }
     }
+    // for (let l = 0; l < lines; l++) {
+    //     var lineContent = document.lineAt(l).text
+    //     //replace consecutive spaces with one space
+    //     lineContent = lineContent.replace(/[ ]{2,}/g, '');
+    //     if (lineContent.includes('=')&&!lineContent.includes(' =')) lineContent = lineContent.replace("=", " =");
+    //     var lineContent = lineContent.toLowerCase().replace( /(\s*)/g,"");
+    //     if(lineCompressed.includes('$*')) lineCompressed = lineCompressed.split('$')[0];
+    //     if (lineCompressed=="") continue;
+    //     // Disregards commented lines
+    //     if (!lineContent.startsWith('--')) {
+    //         var regex = /(?:^|[^!])!+(\w+)/g;
+    //         var regexmem = /member.\w+/g;
+    //         var match;
+    //         var type = "";
+    //         var from = 0;
+    //         var global;
+    //         if (lineCompressed.toLowerCase().startsWith('define ') || lineContent.toLowerCase().startsWith('endmethod')) {
+
+    //             variables.forEach(function (variable) {
+    //                 if (variable.to === null) {
+    //                     variable.to = l;
+    //                 }
+    //             });
+    //         }
+    //         while(match = regexmem.exec(lineCompressed))
+    //         {
+    //             if(match)
+    //             {
+    //                 var variableName = match[0]
+    //                 var filterredObject = objectlist.filter((objects: string)=>
+    //                     lineCompressed.includes( variableName )
+    //                     &&variableName.endsWith('is'+objects.toLowerCase())
+    //                     );
+    //                 if (filterredObject.length > 0) type = filterredObject[0]
+    //                 variables = AssignVar( variableName.replace('member.','').replace('is'+type.toLowerCase(),''),type , from , lines ,true, variables);
+    //             }
+    //         }
+    //         while (match = regex.exec(lineContent.toLowerCase().replace('this.' , ''))) {
+    //             if (match) {
+
+    //                 var to = null;
+    //                 from = l;
+    //                 var variableName = match[1].toLowerCase().replace( /(\s*)/g,"");
+    //                 //set the global variable valid up to the end of the file
+    //                 if (lineContent.includes('!!' + match[1])) {
+    //                     global = true;
+    //                     to = lines;
+    //                 } else {
+    //                     global = false;
+    //                 }
+
+    //                 var ArrayRegex = new RegExp("!" + match[1].toLowerCase() + "\\[\\$*!*\\w*\\d*\\]", 'g');
+    //                 var RealRegex = new RegExp("!" + match[1].toLowerCase() + "\\s*=\\s*\\d+$", 'g');
+    //                 var filterredObject = objectlist.filter((objects: string)=>
+    //                     lineCompressed.includes( '!' + variableName + '=object' + objects.toLowerCase() + '(')
+    //                     ||lineCompressed.includes( '!' + variableName + 'is' +objects.toLowerCase())
+    //                     ||lineCompressed.includes( 'member.' + variableName + 'is' +objects.toLowerCase())
+    //                     );
+    //                 if (filterredObject.length > 0) type = filterredObject[0];
+
+    //                 if( type == "")
+    //                 {
+    //                     if (lineCompressed.includes('!' + variableName + '=array(')
+    //                     || /=\s*!!collectall\w+\s*\([\s|\w,'()!*]*\)$/g.test(lineCompressed)
+    //                     || (lineCompressed.startsWith('!' + variableName + '=')&&methodtable.filter(method=>method.object.toLocaleLowerCase()=="array"&&chkmethod(lineCompressed,method.name)).length>0)
+    //                     || (lineCompressed.startsWith('!' + variableName + '=')&&attributetable.filter(attribute=>attribute.object.toLocaleLowerCase()=="array"&&chkatt(lineCompressed,attribute.name.toLocaleLowerCase())).length>0)
+    //                     || ArrayRegex.exec(lineCompressed)
+    //                     || lineCompressed.includes('var!' + variableName + 'coll')
+    //                     || lineCompressed.includes('var!' + variableName + 'eval')
+    //                     ) {
+    //                         type = "array";
+    //                     }
+    //                     else if (lineCompressed.includes('!' + variableName + '=true')
+    //                     || lineCompressed.includes('!' + variableName + '=false')
+    //                     || (lineCompressed.startsWith('!' + variableName + '=')&&methodtable.filter(method=>method.object.toLocaleLowerCase()=="boolean"&&chkmethod(lineCompressed,method.name)).length>0)
+    //                     || (lineCompressed.startsWith('!' + variableName + '=')&&attributetable.filter(attribute=>attribute.object.toLocaleLowerCase()=="boolean"&&chkatt(lineCompressed,attribute.name.toLocaleLowerCase())).length>0)
+    //                     ) {
+    //                         type = "boolean";
+    //                     }
+    //                     else if (lineCompressed.includes('!' + variableName + 'isstring')
+    //                     || lineCompressed.includes(variableName + "='")
+    //                     || lineCompressed.includes(variableName + "=|")
+    //                     || lineCompressed.includes(variableName + "=string")
+    //                     || lineCompressed.includes(variableName + "=nam")
+    //                     || lineCompressed.includes(variableName + "=desc")
+    //                     || lineCompressed.includes(variableName + "=purp")
+    //                     || lineCompressed.includes(variableName + "=func")
+    //                     || lineCompressed.includes(variableName + "=type")
+    //                     || lineCompressed.includes(variableName + "=fprop")
+    //                     || (lineCompressed.startsWith('!' + variableName + '=')&&methodtable.filter(method=>method.object.toLocaleLowerCase()=="string"&&chkmethod(lineCompressed,method.name)).length>0)
+    //                     || (lineCompressed.startsWith('!' + variableName + '=')&&attributetable.filter(attribute=>attribute.object.toLocaleLowerCase()=="string"&&chkatt(lineCompressed,attribute.name.toLocaleLowerCase())).length>0)
+    //                     || lineCompressed.includes('var!' + variableName)
+    //                     ) {
+    //                         type = "string";
+    //                     }
+    //                     else if (lineCompressed.includes('!' + variableName + 'isgadget')) {
+    //                         type = "gadget";
+    //                     }
+    //                     else if (lineCompressed.includes('!' + variableName + 'isreal')
+    //                     || RealRegex.exec(lineContent)
+    //                     ||lineCompressed.includes('!' + variableName + 'real')
+    //                     || (lineCompressed.startsWith('!' + variableName + '=')&&methodtable.filter(method=>method.object.toLocaleLowerCase()=="real"&&chkmethod(lineCompressed,method.name)).length>0)
+    //                     || (lineCompressed.startsWith('!' + variableName + '=')&&attributetable.filter(attribute=>attribute.object.toLocaleLowerCase()=="real"&&chkatt(lineCompressed,attribute.name.toLocaleLowerCase())).length>0)
+    //                     ) {
+    //                         type = "real";
+    //                     }
+    //                     else if (lineCompressed.includes('!' + variableName + 'isany')) {
+    //                         type = "any";
+    //                     }
+    //                     else if (lineCompressed.includes('!' + variableName + '=currentproject')) {
+    //                         type = "project";
+    //                     }
+    //                     else if ((lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith(".position"))
+    //                     || (lineCompressed.startsWith('!' + variableName + '=')&&methodtable.filter(method=>method.object.toLocaleLowerCase()=="position"&&chkmethod(lineCompressed,method.name)).length>0)
+    //                     || (lineCompressed.startsWith('!' + variableName + '=')&&attributetable.filter(attribute=>attribute.object.toLocaleLowerCase()=="position"&&chkatt(lineCompressed,attribute.name.toLocaleLowerCase())).length>0)
+    //                     ||(lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith(".pos.wrt(world)"))
+    //                     ||(lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith(".pos"))
+    //                     ||(lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith("isposition"))
+    //                     ||(lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith("startwrt/*"))
+    //                     ||(lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith("endwrt/*"))
+    //                     ||(lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith("poswrt/*"))
+    //                     ||(lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith("posewrt/*"))
+    //                     ||(lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith("posswrt/*"))
+    //                     ) {
+    //                         type = "position";
+    //                     }
+    //                     else if ( lineCompressed.includes(variableName + "=ce")
+    //                     || lineCompressed.includes(variableName + "=ref")
+    //                     || lineCompressed.includes(variableName + "=/")
+    //                     || (lineCompressed.startsWith('!' + variableName + '=')&&methodtable.filter(method=>method.object.toLocaleLowerCase()=="dbref"&&chkmethod(lineCompressed,method.name)).length>0)
+    //                     || (lineCompressed.startsWith('!' + variableName + '=')&&attributetable.filter(attribute=>attribute.object.toLocaleLowerCase()=="dbref"&&chkatt(lineCompressed,attribute.name.toLocaleLowerCase())).length>0)
+    //                     || (lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith("!!ce"))
+    //                     || lineCompressed.includes(variableName + "=own")
+    //                     || lineCompressed.includes(variableName + "=pre")
+    //                     || lineCompressed.includes(variableName + "=site")
+    //                     || lineCompressed.includes(variableName + "=zone")
+    //                     || lineCompressed.includes(variableName + "=rest")
+    //                     || lineCompressed.includes(variableName + "=stru")
+    //                     || lineCompressed.includes(variableName + "=hang")
+    //                     || lineCompressed.includes(variableName + "=nex")
+    //                     || /=\s*!!collectall\w*\s*\([\s|\w,'()!?*]*\)\[\$*!*\d*\w*\]$/g.test(lineCompressed)
+    //                     || lineCompressed.includes(variableName + "=dbref(")
+    //                     ){
+    //                         type = "DBRef";
+    //                     }
+    //                     else if ( lineCompressed.includes(variableName + "=orientation'")
+    //                     || (lineCompressed.startsWith('!' + variableName + '=')&&methodtable.filter(method=>method.object.toLocaleLowerCase()=="orientation"&&chkmethod(lineCompressed,method.name)).length>0)
+    //                     || (lineCompressed.startsWith('!' + variableName + '=')&&attributetable.filter(attribute=>attribute.object.toLocaleLowerCase()=="orientation"&&chkatt(lineCompressed,attribute.name.toLocaleLowerCase())).length>0)
+    //                     || (lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith("orientation"))
+    //                     || lineCompressed.includes(variableName + "=own")
+    //                     || lineCompressed.includes(variableName + "=pre")
+    //                     || lineCompressed.includes(variableName + "=nex")
+    //                     || lineCompressed.includes(variableName + "=oriwrt")
+    //                     || lineCompressed.includes(variableName + "=orientationwrt")
+    //                     ){
+    //                         type = "orientation";
+    //                     }
+    //                     else if ( lineCompressed.includes(variableName + "=currentsession'")
+    //                     ){
+    //                         type = "session";
+    //                     }
+    //                 }
+    //                 variables = AssignVar( variableName ,type , from , to ,global, variables);
+    //             }
+    //         }
+    //         while (match = regex.exec(lineContent)) {
+    //             if (match && match[1] != "this") {
+    //                 var to = null;
+    //                 from = l;
+    //                 //set the global variable valid up to the end of the file
+    //                 if (lineContent.includes('!!' + match[1])) {
+    //                     global = true;
+    //                     to = lines;
+    //                 } else {
+    //                     global = false;
+    //                 }
+    //                 var variableName = match[1].toLowerCase().replace( /(\s*)/g,"");
+    //                 var findvarialbe  = variables.filter(variable => (variable.name === variableName));
+    //                 if ( findvarialbe.length==0) continue;
+    //                 if ( lineCompressed.includes("=!")&& findvarialbe[0].type==""&& !lineCompressed.includes("=!this"))
+    //                 {
+    //                     var getva = lineContent.replace( ' = ' , '=' ).split('=')[1].split( ' ')[0].replace('!' ,'').replace('!' ,'')
+    //                     var findContainedVarialbe  = variables.filter(variable => (variable.name == getva.toLowerCase()));
+    //                     if(findContainedVarialbe.length==0) continue;
+    //                     varString = {
+    //                         name: variableName,
+    //                         type: findContainedVarialbe[0].type,
+    //                         from: findvarialbe[0].from,
+    //                         to: findvarialbe[0].to,
+    //                         global:findvarialbe[0].global
+    //                     };
+    //                     var filterTo = variables.filter(variable => (variable.name === varString.name && variable.to === varString.to));
+    //                     var varindex = variables.map(variable => variable.name).indexOf(varString.name);
+    //                     variables[varindex] = varString;
+    //                 }
+    //             }
+
+    //         }
+
+    //     }
+
+    // }
 
     var Recognized = variables.filter(variable => (variable.type !== null));
 

@@ -1,5 +1,5 @@
 # PML Extension for `Visual Studio Code`
-# This Extension is forked from https://marketplace.visualstudio.com/items?itemName=angelincalu.pml
+>This Extension is forked from https://marketplace.visualstudio.com/items?itemName=angelincalu.pml
 
 ## Requirements
 
@@ -35,5 +35,3 @@
 
 - PML object들에 대해 메소드 자동 완성 기능 제공
 - 기본적인 코드 완성 기능 제공
-
-**All contributions are welcomed!**

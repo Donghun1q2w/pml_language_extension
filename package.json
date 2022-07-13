@@ -115,5 +115,8 @@
 		"publisherId": "6745866b-5358-4924-983c-63331eacc1c8",
 		"publisherDisplayName": "Donghun Lee",
 		"isPreReleaseVersion": false
+	},
+	"dependencies": {
+		"vscode-extension-telemetry": "^0.4.5"
 	}
 }
