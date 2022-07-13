@@ -1,111 +1,119 @@
 {
-  "name": "pml",
-  "displayName": "PML",
-  "description": "PML Language Highlighter and Snippets",
-  "version": "0.2.0",
-  "publisher": "angelincalu",
-  "repository": {
-    "url": "https://github.com/x10sv/pml"
-  },
-  "homepage": "https://github.com/x10sv/pml",
-  "bugs": {
-    "url": "https://github.com/x10sv/pml/issues"
-  },
-  "engines": {
-    "vscode": "^1.21.1"
-  },
-  "categories": [
-    "Programming Languages",
-    "Snippets",
-    "Other"
-  ],
-  "activationEvents": [
-    "*",
-    "onLanguage:pml",
-    "onCommand:extension.pmlUglify"
-  ],
-  "main": "./out/extension",
-  "contributes": {
-    "languages": [
-      {
-        "id": "pml",
-        "aliases": [
-          "Programmable Macro Language",
-          "pml"
-        ],
-        "extensions": [
-          ".pmlfrm",
-          ".pmlmac",
-          ".pmlfnc",
-          ".pmlobj",
-          ".pmldat",
-          ".pmlcmd",
-          ".mac"
-        ],
-        "configuration": "./language-configuration.json"
-      }
-    ],
-    "grammars": [
-      {
-        "language": "pml",
-        "scopeName": "source.pml",
-        "path": "./syntaxes/pml.tmLanguage.json"
-      }
-    ],
-    "snippets": [
-      {
-        "language": "pml",
-        "path": "./snippets/pmlformg.json"
-      },
-      {
-        "language": "pml",
-        "path": "./snippets/pmlform.json"
-      },
-      {
-        "language": "pml",
-        "path": "./snippets/pmlmet.json"
-      },
-      {
-        "language": "pml",
-        "path": "./snippets/pmlobj.json"
-      },
-      {
-        "language": "pml",
-        "path": "./snippets/pmlfunc.json"
-      },
-      {
-        "language": "pml",
-        "path": "./snippets/pmlbut.json"
-      },
-      {
-        "language": "pml",
-        "path": "./snippets/helpers.json"
-      }
-    ],
-    "commands": [
-      {
-        "command": "extension.pmlUglify",
-        "title": "PML Uglify"
-      }
-    ],
-    "breakpoints": [
-      {
-        "language": "pml"
-      }
-    ]
-  },
-  "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "lint": "tslint ./src/*.ts",
-    "watch": "tsc -watch -p ./"
-  },
-  "devDependencies": {
-    "@types/mocha": "^2.2.42",
-    "@types/node": "^8.10.60",
-    "@types/vscode": "^1.29.1",
-    "eslint": "^5.16.0",
-    "tslint": "^5.20.1",
-    "typescript": "^3.8.3"
-  }
+	"name": "pml",
+	"displayName": "PML",
+	"description": "PML Language Highlighter and Snippets",
+	"version": "0.2.0",
+	"publisher": "angelincalu",
+	"repository": {
+		"url": "https://github.com/Donghun1q2w/pml-vscode-extension"
+	},
+	"homepage": "https://github.com/Donghun1q2w/pml-vscode-extension",
+	"bugs": {
+		"url": "https://github.com/Donghun1q2w/pml-vscode-extension/issues"
+	},
+	"engines": {
+		"vscode": "^1.29.1"
+	},
+	"categories": [
+		"Programming Languages",
+		"Snippets",
+		"Other"
+	],
+	"activationEvents": [
+		"*",
+		"onLanguage:pml",
+		"onCommand:extension.pmlUglify"
+	],
+	"main": "./out/extension",
+	"contributes": {
+		"languages": [
+			{
+				"id": "pml",
+				"aliases": [
+					"Programmable Macro Language",
+					"pml"
+				],
+				"extensions": [
+					".pmlfrm",
+					".pmlmac",
+					".pmlfnc",
+					".pmlobj",
+					".pmldat",
+					".pmlcmd",
+					".pmlmac",
+					".mac"
+				],
+				"configuration": "./language-configuration.json"
+			}
+		],
+		"grammars": [
+			{
+				"language": "pml",
+				"scopeName": "source.pml",
+				"path": "./syntaxes/pml.tmLanguage.json"
+			}
+		],
+		"snippets": [
+			{
+				"language": "pml",
+				"path": "./snippets/pmlformg.json"
+			},
+			{
+				"language": "pml",
+				"path": "./snippets/pmlform.json"
+			},
+			{
+				"language": "pml",
+				"path": "./snippets/pmlmet.json"
+			},
+			{
+				"language": "pml",
+				"path": "./snippets/pmlobj.json"
+			},
+			{
+				"language": "pml",
+				"path": "./snippets/pmlfunc.json"
+			},
+			{
+				"language": "pml",
+				"path": "./snippets/pmlbut.json"
+			},
+			{
+				"language": "pml",
+				"path": "./snippets/helpers.json"
+			}
+		],
+		"commands": [
+			{
+				"command": "extension.pmlUglify",
+				"title": "PML Uglify"
+			}
+		],
+		"breakpoints": [
+			{
+				"language": "pml"
+			}
+		]
+	},
+	"scripts": {
+		"vscode:prepublish": "npm run compile",
+		"compile": "tsc -p ./",
+		"lint": "tslint ./src/*.ts",
+		"watch": "tsc -watch -p ./"
+	},
+	"devDependencies": {
+		"@types/mocha": "^2.2.42",
+		"@types/node": "^8.10.60",
+		"@types/vscode": "^1.29.1",
+		"eslint": "^5.16.0",
+		"tslint": "^5.20.1",
+		"typescript": "^3.8.3"
+	},
+	"__metadata": {
+		"installedTimestamp": 1639631357638,
+		"id": "365afce9-c473-4ebc-a523-4a3501e978f5",
+		"publisherId": "6745866b-5358-4924-983c-63331eacc1c8",
+		"publisherDisplayName": "Angelin Calu",
+		"isPreReleaseVersion": false
+	}
 }

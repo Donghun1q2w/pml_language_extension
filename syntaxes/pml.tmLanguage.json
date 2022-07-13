@@ -29,7 +29,7 @@
         },
         {
           "name": "keyword.control.pml",
-          "match": "\\b(if|else|elseif|endif|then|set|unset|do|from|to|enddo|skip|return|is|object|endobject|value|values|indices|ind|index|val|evar|eval|evaluate|exist|exists|break|before|after|reorder|label|mode)\\b"
+          "match": "(?i)\\b(if|else|elseif|endif|then|set|unset|do|from|to|enddo|skip|return|is|object|endobject|value|values|indices|ind|index|val|evar|eval|evaluate|exist|exists|break|before|after|reorder|label|mode)\\b"
         },
         {
           "name": "keyword.control.pml",
@@ -61,7 +61,7 @@
         },
         {
           "name": "storage.modifier.pml",
-          "match": "\\b(using|namespace|handle|elsehandle|endhandle|onerror|continue|golabel|exit|frame|view|setup|layout|import|form|undodb|world)\\b"
+          "match": "(?i)\\b(using|namespace|handle|elsehandle|endhandle|onerror|continue|golabel|exit|frame|view|setup|layout|import|form|undodb|world)\\b"
         },
         {
           "name": "storage.modifier.pml",

@@ -2,7 +2,8 @@
 
 import * as vscode from 'vscode';
 import Uglifier from './Uglifier'
-import keywords from './keywords.json'
+import methodtable from './methodtable.json'
+import attributetable from './attributetable.json'
 import dictionary from './dictionary.json'
 
 
@@ -57,12 +58,15 @@ function registerProviders(Context: vscode.ExtensionContext, knownVariables: any
     let langs = vscode.languages;
 
 
-    subscriptions.push(langs.registerCompletionItemProvider("pml", new GeneralKeyboards()));
-    subscriptions.push(langs.registerCompletionItemProvider("pml", new GeneralMethods()));
-    subscriptions.push(langs.registerCompletionItemProvider("pml", new VariableMethods(parseKeys())));
-    subscriptions.push(langs.registerDocumentSymbolProvider("pml", new PmlDocumentSymbolProvider()));
-
+    subscriptions.push(langs.registerCompletionItemProvider("pml", new GeneralAttachedMethods()));
+    if(subscriptions.length > 0) return;
     subscriptions.push(langs.registerCompletionItemProvider("pml", new DocumentMethods(), '!this.'));
+    if(subscriptions.length > 0) return;
+    subscriptions.push(langs.registerDocumentSymbolProvider("pml", new PmlDocumentSymbolProvider()));
+    if(subscriptions.length > 0) return;
+
+    subscriptions.push(langs.registerCompletionItemProvider("pml", new GeneralMethods()));
+    // subscriptions.push(langs.registerCompletionItemProvider("pml", new VariableMethods(parseKeys())));
 
 }
 
@@ -79,15 +83,40 @@ class DocumentMethods {
     provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext) {
 
         let methods: Array<vscode.CompletionItem> = [];
-
+        if (!document.lineAt(position.line).text.replace( /(\s*)/g,"").startsWith('!this.'))
+            return methods;
         for (var i = 0; i < document.lineCount; i++) {
             var line = document.lineAt(i);
 
             let lineTrimmed: string = line.text.trim();
-
+            if (lineTrimmed.includes('$*')) lineTrimmed=lineTrimmed.split('$')[0].trim();
             if (lineTrimmed.toLowerCase().startsWith("define method .")) {
-                let methodName = line.text.substr(15);
-                methods.push(new vscode.CompletionItem(methodName, vscode.CompletionItemKind.Method));
+                let attName = line.text.substr(15);
+                let  methodname:string = attName.split('(')[0];
+                let  input:string = attName.split('(')[1].split(')')[0].trim();
+                let  output:string = attName.split(')')[1].trim();
+                let seqnum:number = 1;
+                if(input!=''){
+                    if(input.split(',').length>2){
+                        attName = methodname + '( ${1:' + input + '} )';
+                    }
+                    else{
+                        attName = methodname + '( ${1:' + input.split(',')[0].trim() + '}';
+                        for( var j=1;j<input.split(',').length;j++){
+                            let num:number = j + 1;
+                            attName = attName + ' , ${'+num.toString()+':' + input.split(',')[j].trim() + '}';
+                            seqnum  = j + 1;
+                        }
+                        attName = attName + ' )';
+                    }
+                }
+                else  attName = methodname + '()';
+                if(output!=''){
+                    attName += ' {' + seqnum.toString() + ':' + output + '}';
+                }
+
+                methods.push(new vscode.CompletionItem(methodname, vscode.CompletionItemKind.Method));
+                methods[methods.length-1].insertText= new vscode.SnippetString(attName);
             }
 
         }
@@ -98,34 +127,60 @@ class DocumentMethods {
 }
 
 
-class GeneralKeyboards {
+class GeneralAttachedMethods {
+    variables: any;
     provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext) {
+        let type:string = "";
+        var cont = document.lineAt(position.line).text;
+        let variableName = cont.substring(0,position.character - 1);
+        if (!cont.substring(0,position.character ).endsWith('.')) return;
+        if(variableName.toLowerCase().endsWith(')'))
+            type = methodtable.filter( methods => chkmethod(variableName, methods.name.trim().toLowerCase()))[0].object;
+        else if(/!\w+$/g.test(variableName.toLowerCase().replace('this.','')))
+            type =parseKeys().filter( variable => variableName.toLowerCase().replace('this.','').endsWith('!'+variable.name))[0].type;
+        else
+            type = attributetable.filter( methods => chkatt(variableName, methods.name.trim().toLowerCase()))[0].object;
+        
+        const filteredMethods = dictionary.filter(methods => methods.library.toLowerCase() === type.toLowerCase());
+        let Methods = (filteredMethods[0].methods).map(method => {
 
-        // const activeEditor = vscode.window.activeTextEditor;
+            let item = new vscode.CompletionItem(method.label, vscode.CompletionItemKind.Method);
 
-        return keywords.map(keyword => {
+            if (method.snippet) {
+                item.insertText = new vscode.SnippetString(method.snippet);
+            }
 
-            // if (activeEditor) {
-            //     let activeLine = activeEditor.selection.active.line;
-            //     let activeLineText = document.lineAt(activeLine)
-            // } else {
-            //     let activeLineText = ''
-            // }
+            if (method.md) {
+                item.documentation = new vscode.MarkdownString(method.md);
+            }
 
-            // if (activeLineText != '') {
+            return item;
 
-            // }
-
-            return new vscode.CompletionItem(keyword, vscode.CompletionItemKind.Keyword);
         });
+        return Methods;
+
+
     }
 }
 
 
 class GeneralMethods {
-    provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext) {
 
-        const filteredGeneralMethods = dictionary.filter(methods => methods.library === "General");
+    provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext) {
+        
+        var cont = document.lineAt(position.line).text;
+        let variableName = "";
+        for( let i = 0; i<cont.length ;i++ )
+        {
+            let strnum = cont.length - 2 - i;
+            if( cont.substring(strnum,strnum+1)=="!") break;
+            variableName = cont.substring(strnum,strnum+1) + variableName;
+        }
+        if (variableName.toLowerCase().replace('this.','').includes('.')) return;
+        else if (variableName.toLowerCase()==='this')return;
+        var variables:varString[]=parseKeys();
+        let vatype = variables.filter( variable => variable.name === variableName.toLowerCase().replace('this.',''));
+        const filteredGeneralMethods = dictionary.filter(methods => methods.library.toLowerCase() === vatype[0].type.toLowerCase());
         let Methods = (filteredGeneralMethods[0].methods).map(method => {
 
             let item = new vscode.CompletionItem(method.label, vscode.CompletionItemKind.Method);
@@ -152,93 +207,48 @@ class VariableMethods {
 
     constructor(variables: any) {
         this.variables = variables;
+        console.log(variables[0].name);
     }
 
     provideCompletionItems() {
+        this.variables=parseKeys();
         return this.variables.map((variable: { name: string; }) => {
             return new vscode.CompletionItem("!" + variable.name, vscode.CompletionItemKind.Variable);
         });
     }
-
-    // provideCompletionItems(document: vscode.TextDocument, position: vscode.Position) {
-    //     let list: any = [];
-    //     let variables = this.variables;
-
-    //     if (variables) {
-
-    // var varNames = variables.forEach(function (v: any) {
-    //     return (v.name);
-    // });
-
-    // let linePrefix = document.lineAt(position).text.substr(0, position.character);
-
-    // variables.forEach(function (variable: any) {
-
-    //     console.log(variable.name);
-
-    // const filteredMethods = dictionary.filter(methods => methods.library === variable.type);
-
-    // let item = new vscode.CompletionItem("!" + variable.name, vscode.CompletionItemKind.Variable);
-
-    // let Methods = (filteredMethods[0].methods).map(method => {
-
-    //     let item = new vscode.CompletionItem("!" + variable.name, vscode.CompletionItemKind.Method);
-
-    //     // if (method.snippet) {
-    //     //     item.insertText = new vscode.SnippetString(method.snippet);
-    //     // }
-
-    //     // if (method.md) {
-    //     //     item.documentation = new vscode.MarkdownString(method.md);
-    //     // }
-
-    //     return item;
-
-    // });
-
-    //             list.push(item);
-
-    //         });
-    //     }
-    //     console.log(list);
-
-    //     return list;
-
-    // }
-
-
 }
 
-
-function parseKeys() {
-    if (!vscode.window.activeTextEditor) {
-        return; // no editor
-    }
-
+class varString{ name: string=""; type: string = ""; from: Number=0   ; to: Number| null=null; global: Boolean=false;}
+function parseKeys():varString[] {
+    var aa :varString[] = [];
+    if (!vscode.window.activeTextEditor) return aa; // no editor
+    
     let {
         document
     } = vscode.window.activeTextEditor;
 
     var lines = document.lineCount;
 
-    var varString: { name: string, type: string, from: Number, to: Number | null, global: Boolean };
+    var varString: varString;
     var variables: any[] = [];
-
+    let objectlist = dictionary.map(dic=>dic.library);
     for (let l = 0; l < lines; l++) {
         var lineContent = document.lineAt(l).text
-
         //replace consecutive spaces with one space
-        lineContent = lineContent.replace(/[ ]{2,}/g, '')
-
+        lineContent = lineContent.replace(/[ ]{2,}/g, '');
+        if (lineContent.includes('=')&&!lineContent.includes(' =')) lineContent = lineContent.replace("=", " =");
+        var lineCompressed = lineContent.toLowerCase().replace( /(\s*)/g,"");
+        if(lineCompressed.includes('$*')) lineCompressed = lineCompressed.split('$')[0];
+        if (lineCompressed=="") continue;
         // Disregards commented lines
         if (!lineContent.startsWith('--')) {
             var regex = /(?:^|[^!])!+(\w+)/g;
+            var regexmem = /member.\w+/g;
             var match;
             var type = "";
             var from = 0;
             var global;
-
-            if (lineContent.toLowerCase().startsWith('define ') || lineContent.toLowerCase().startsWith('endmethod')) {
+            if (lineCompressed.toLowerCase().startsWith('define ') || lineContent.toLowerCase().startsWith('endmethod')) {
 
                 variables.forEach(function (variable) {
 
@@ -250,13 +260,25 @@ function parseKeys() {
                 });
 
             }
-
-            while (match = regex.exec(lineContent)) {
-                if (match && match[1] != "this") {
+            while(match = regexmem.exec(lineCompressed))
+            {
+                if(match)
+                {
+                    var variableName = match[0]
+                    var filterredObject = objectlist.filter(objects=>
+                        lineCompressed.includes( variableName )
+                        &&variableName.endsWith('is'+objects.toLowerCase())
+                        );
+                    if (filterredObject.length > 0) type = filterredObject[0]
+                    variables = AssignVar( variableName.replace('member.','').replace('is'+type.toLowerCase(),''),type , from , lines ,true, variables);
+                }
+            }
+            while (match = regex.exec(lineContent.toLowerCase().replace('this.' , ''))) {
+                if (match) {
 
                     var to = null;
                     from = l;
-
+                    var variableName = match[1].toLowerCase().replace( /(\s*)/g,"");
                     //set the global variable valid up to the end of the file
                     if (lineContent.includes('!!' + match[1])) {
                         global = true;
@@ -265,194 +287,144 @@ function parseKeys() {
                         global = false;
                     }
 
+                    var ArrayRegex = new RegExp("!" + match[1].toLowerCase() + "\\[\\$*!*\\w*\\d*\\]", 'g');
+                    var RealRegex = new RegExp("!" + match[1].toLowerCase() + "\\s*=\\s*\\d+$", 'g');
+                    var filterredObject = objectlist.filter(objects=>
+                        lineCompressed.includes( '!' + variableName + '=object' + objects.toLowerCase() + '(')
+                        ||lineCompressed.includes( '!' + variableName + 'is' +objects.toLowerCase())
+                        ||lineCompressed.includes( 'member.' + variableName + 'is' +objects.toLowerCase())
+                        );
+                    if (filterredObject.length > 0) type = filterredObject[0];
 
-                    if (lineContent.toLowerCase().startsWith('setup form')) {
-                        type = "Form";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object marui(')) {
-                        type = "MarUi";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object marutil(')) {
-                        type = "MarUtil";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object mardrafting(')) {
-                        type = "MarDrafting";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object marcaptureregionplanar(')) {
-                        type = "MarCaptureRegionPlanar";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object marcontourplanar(')) {
-                        type = "MarContourPlanar";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object marrectangleplanar(')) {
-                        type = "MarRectanglePlanar";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object marelementhandle(')) {
-                        type = "MarElementHandle";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object marmodel(')) {
-                        type = "MarModel";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object mardex(')) {
-                        type = "MarDex";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object marpanelschema(')) {
-                        type = "MarPanelSchema";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object marpoint(')) {
-                        type = "MarPoint";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object marpointplanar(')) {
-                        type = "MarPointPlanar";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object marsymbolicview(')) {
-                        type = "MarSymbolicView";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object marhullpan(')) {
-                        type = "MarHullPan";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object marhullpan(')) {
-                        type = "MarHullPan";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object marprintoptions(')) {
-                        type = "MarPrintOptions";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object netdatasource(')) {
-                        type = "NetDataSource";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object marpythonengine(')) {
-                        type = "MarPythonEngine";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object pmlfilebrowser(')) {
-                        type = "PMLFileBrowser";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object file(')) {
-                        type = "file";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object format(')) {
-                        type = "format";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object datetime(')) {
-                        type = "DateTime";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object martext(')) {
-                        type = "MarText";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object marsymbol(')) {
-                        type = "MarSymbol";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object marcolour(')) {
-                        type = "MarColour";
-                    }
-
-                    // add here something like var !x COLL
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object collection(')
-                        || lineContent.toLowerCase().includes('var !' + match[1].toLowerCase() + ' coll')
-                    ) {
-                        type = "Collection";
-                    }
-
-                    var ArrayRegex = new RegExp("!" + match[1] + "\\[\\d+\\]", 'g');
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' is array')
-                        || lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = array(')
-                        || lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object array(')
-                        || ArrayRegex.exec(lineContent)
-                    ) {
-                        type = "array";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' is boolean')
-                        || lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object boolean(')
-                        || lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = true')
-                        || lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = false')
-                    ) {
-                        type = "boolean";
-                    }
-
-                    //add here something like var !x USER|HOST|CLOCK ...
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' is string')
-                        || lineContent.includes(match[1] + " = '")
-                        || lineContent.includes(match[1] + " = |")
-                    ) {
-                        type = "string";
-                    }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' is gadget')) {
-                        type = "gadget";
-                    }
-
-                    var RealRegex = new RegExp("!" + match[1] + "\\s+=\\s+\\d+", 'g');
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' is real')
+                    if( type == "")
+                    {
+                        if (lineCompressed.includes('!' + variableName + '=array(')
+                        || /=\s*!!collectall\w+\s*\([\s|\w,'()!*]*\)$/g.test(lineCompressed)
+                        || (lineCompressed.startsWith('!' + variableName + '=')&&methodtable.filter(method=>method.object.toLocaleLowerCase()=="array"&&chkmethod(lineCompressed,method.name)).length>0)
+                        || (lineCompressed.startsWith('!' + variableName + '=')&&attributetable.filter(attribute=>attribute.object.toLocaleLowerCase()=="array"&&chkatt(lineCompressed,attribute.name.toLocaleLowerCase())).length>0)
+                        || ArrayRegex.exec(lineCompressed)
+                        || lineCompressed.includes('var!' + variableName + 'coll')
+                        || lineCompressed.includes('var!' + variableName + 'eval')
+                        ) {
+                            type = "array";
+                        }
+                        else if (lineCompressed.includes('!' + variableName + '=true')
+                        || lineCompressed.includes('!' + variableName + '=false')
+                        || (lineCompressed.startsWith('!' + variableName + '=')&&methodtable.filter(method=>method.object.toLocaleLowerCase()=="boolean"&&chkmethod(lineCompressed,method.name)).length>0)
+                        || (lineCompressed.startsWith('!' + variableName + '=')&&attributetable.filter(attribute=>attribute.object.toLocaleLowerCase()=="boolean"&&chkatt(lineCompressed,attribute.name.toLocaleLowerCase())).length>0)
+                        ) {
+                            type = "boolean";
+                        }
+                        else if (lineCompressed.includes('!' + variableName + 'isstring')
+                        || lineCompressed.includes(variableName + "='")
+                        || lineCompressed.includes(variableName + "=|")
+                        || lineCompressed.includes(variableName + "=string")
+                        || lineCompressed.includes(variableName + "=nam")
+                        || (lineCompressed.startsWith('!' + variableName + '=')&&methodtable.filter(method=>method.object.toLocaleLowerCase()=="string"&&chkmethod(lineCompressed,method.name)).length>0)
+                        || (lineCompressed.startsWith('!' + variableName + '=')&&attributetable.filter(attribute=>attribute.object.toLocaleLowerCase()=="string"&&chkatt(lineCompressed,attribute.name.toLocaleLowerCase())).length>0)
+                        || lineCompressed.includes('var!' + variableName)
+                        ) {
+                            type = "string";
+                        }
+                        else if (lineCompressed.includes('!' + variableName + 'isgadget')) {
+                            type = "gadget";
+                        }
+                        else if (lineCompressed.includes('!' + variableName + 'isreal')
                         || RealRegex.exec(lineContent)
-                    ) {
-                        type = "real";
+                        ||lineCompressed.includes('!' + variableName + 'real')
+                        || (lineCompressed.startsWith('!' + variableName + '=')&&methodtable.filter(method=>method.object.toLocaleLowerCase()=="real"&&chkmethod(lineCompressed,method.name)).length>0)
+                        || (lineCompressed.startsWith('!' + variableName + '=')&&attributetable.filter(attribute=>attribute.object.toLocaleLowerCase()=="real"&&chkatt(lineCompressed,attribute.name.toLocaleLowerCase())).length>0)
+                        ) {
+                            type = "real";
+                        }
+                        else if (lineCompressed.includes('!' + variableName + 'isany')) {
+                            type = "any";
+                        }
+                        else if (lineCompressed.includes('!' + variableName + '=currentproject')) {
+                            type = "project";
+                        }
+                        else if ((lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith(".position"))
+                        || (lineCompressed.startsWith('!' + variableName + '=')&&methodtable.filter(method=>method.object.toLocaleLowerCase()=="position"&&chkmethod(lineCompressed,method.name)).length>0)
+                        || (lineCompressed.startsWith('!' + variableName + '=')&&attributetable.filter(attribute=>attribute.object.toLocaleLowerCase()=="position"&&chkatt(lineCompressed,attribute.name.toLocaleLowerCase())).length>0)
+                        ||(lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith(".pos.wrt(world)"))
+                        ||(lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith(".pos"))
+                        ||(lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith("isposition"))
+                        ||(lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith("startwrt/*"))
+                        ||(lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith("endwrt/*"))
+                        ||(lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith("poswrt/*"))
+                        ||(lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith("posewrt/*"))
+                        ||(lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith("posswrt/*"))
+                        ) {
+                            type = "position";
+                        }
+                        else if ( lineCompressed.includes(variableName + "=ce")
+                        || lineCompressed.includes(variableName + "=ref")
+                        || lineCompressed.includes(variableName + "=/")
+                        || (lineCompressed.startsWith('!' + variableName + '=')&&methodtable.filter(method=>method.object.toLocaleLowerCase()=="dbref"&&chkmethod(lineCompressed,method.name)).length>0)
+                        || (lineCompressed.startsWith('!' + variableName + '=')&&attributetable.filter(attribute=>attribute.object.toLocaleLowerCase()=="dbref"&&chkatt(lineCompressed,attribute.name.toLocaleLowerCase())).length>0)
+                        || (lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith("!!ce"))
+                        || lineCompressed.includes(variableName + "=own")
+                        || lineCompressed.includes(variableName + "=pre")
+                        || lineCompressed.includes(variableName + "=site")
+                        || lineCompressed.includes(variableName + "=zone")
+                        || lineCompressed.includes(variableName + "=rest")
+                        || lineCompressed.includes(variableName + "=stru")
+                        || lineCompressed.includes(variableName + "=hang")
+                        || lineCompressed.includes(variableName + "=nex")
+                        || /=\s*!!collectall\w*\s*\([\s|\w,'()!?*]*\)\[\$*!*\d*\w*\]$/g.test(lineCompressed)
+                        || lineCompressed.includes(variableName + "=dbref(")
+                        ){
+                            type = "DBRef";
+                        }
+                        else if ( lineCompressed.includes(variableName + "=orientation'")
+                        || (lineCompressed.startsWith('!' + variableName + '=')&&methodtable.filter(method=>method.object.toLocaleLowerCase()=="orientation"&&chkmethod(lineCompressed,method.name)).length>0)
+                        || (lineCompressed.startsWith('!' + variableName + '=')&&attributetable.filter(attribute=>attribute.object.toLocaleLowerCase()=="orientation"&&chkatt(lineCompressed,attribute.name.toLocaleLowerCase())).length>0)
+                        || (lineCompressed.startsWith('!' + variableName + '=')&&lineCompressed.endsWith("orientation"))
+                        || lineCompressed.includes(variableName + "=own")
+                        || lineCompressed.includes(variableName + "=pre")
+                        || lineCompressed.includes(variableName + "=nex")
+                        || lineCompressed.includes(variableName + "=oriwrt")
+                        || lineCompressed.includes(variableName + "=orientationwrt")
+                        ){
+                            type = "orientation";
+                        }
+                        else if ( lineCompressed.includes(variableName + "=currentsession'")
+                        ){
+                            type = "session";
+                        }
                     }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' is any')) {
-                        type = "any";
+                    variables = AssignVar( variableName ,type , from , to ,global, variables);
+                }
+            }
+            while (match = regex.exec(lineContent)) {
+                if (match && match[1] != "this") {
+                    var to = null;
+                    from = l;
+                    //set the global variable valid up to the end of the file
+                    if (lineContent.includes('!!' + match[1])) {
+                        global = true;
+                        to = lines;
+                    } else {
+                        global = false;
                     }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = current project')) {
-                        type = "project";
+                    var variableName = match[1].toLowerCase().replace( /(\s*)/g,"");
+                    var findvarialbe  = variables.filter(variable => (variable.name === variableName));
+                    if ( lineCompressed.includes('=!')&& findvarialbe[0].type==""&& !lineCompressed.includes('=!this'))
+                    {
+                        var getva = lineContent.replace( ' = ' , '=' ).split('=')[1].split( ' ')[0].replace('!' ,'').replace('!' ,'')
+                        var findContainedVarialbe  = variables.filter(variable => (variable.name === getva.toLowerCase()));
+                        if(findContainedVarialbe.length==0) continue;
+                        varString = {
+                            name: variableName,
+                            type: findContainedVarialbe[0].type,
+                            from: findvarialbe[0].from,
+                            to: findvarialbe[0].to,
+                            global:findvarialbe[0].global
+                        };
+                        var filterTo = variables.filter(variable => (variable.name === varString.name && variable.to === varString.to));
+                        var varindex = variables.map(variable => variable.name).indexOf(varString.name);
+                        variables[varindex] = varString;
                     }
-
-                    if (lineContent.toLowerCase().includes('!' + match[1].toLowerCase() + ' = object dbref(')) {
-                        type = "DBRef";
-                    }
-
-
-                    varString = {
-                        name: match[1].toLowerCase(),
-                        type: type,
-                        from: from,
-                        to: to,
-                        global: global
-                    };
-
-                    var filterTo = variables.filter(variable => (variable.name === varString.name && variable.to === varString.to));
-
-                    if (filterTo.length === 0) {
-                        variables.push(varString);
-                    }
-
-
-                    if (type !== null) {
-                        variables.forEach(function (variable) {
-
-                            if (variable.name === varString.name && variable.type === null) {
-                                variable.type = type;
-                            }
-
-                        });
-                    }
-
                 }
 
             }
@@ -465,8 +437,63 @@ function parseKeys() {
 
     return Recognized;
 }
+function AssignVar( variableName: string , type: string , from : Number , to : any , global: boolean , variables : varString[]){
+    var resultvariable:varString[] = variables;
+    var varString: { name: string, type: string, from: Number, to: Number | null, global: Boolean };
+    varString = {
+        name: variableName,
+        type: type,
+        from: from,
+        to: to,
+        global: global
+    };
+
+    var filterTo = resultvariable.filter(variable => (variable.name === varString.name && variable.to === varString.to));
+
+    if (filterTo.length === 0) {
+        resultvariable.push(varString);
+    }
 
 
+    if (type !== null && type !=="") {
+        resultvariable.forEach(function (variable) {
+            if (variable.name === varString.name && (variable.type === null||variable.type === "")) {
+                variable.type = type;
+            }
+        });
+    }
+    return resultvariable;
+}
+function chkmethod( line :string , attName : string ) : boolean {
+    let result:boolean = false;
+    let bracketR:number = 0;
+    let bracketL:number = 0;
+    let modifiedLine:string = line.toLowerCase().replace(/\s+/g, "");
+    
+    if(!modifiedLine.endsWith(')'))
+        return result;
+    for(let i = 0; i < modifiedLine.length; i++)
+    {
+        let character = modifiedLine.charAt(modifiedLine.length -1 - i);
+        if(character=='(') bracketL++;
+        else if(character==')') bracketR++;
+        if(bracketL==bracketR){
+            let chkstring = modifiedLine.substring(0,modifiedLine.length -1 - i);
+            result = modifiedLine.substring(0,modifiedLine.length -1 - i).endsWith('.'+attName.toLowerCase());
+            break;
+        }
+    }
+    return result;
+}
+function chkatt( line :string , attName : string ) : boolean {
+    let result:boolean = false;
+    let bracketR:number = 0;
+    let bracketL:number = 0;
+    let modifiedLine:string = line.toLowerCase().replace(/\s+/g, "");
+    var chkatt = /[a-zA-Z]$/g;
+    if(!chkatt.test(modifiedLine)) return result;
+    return modifiedLine.endsWith('.' + attName.toLocaleLowerCase());
+}
 function endsWithAny(suffixes: any, string: string, delim: string) {
     for (let suffix of suffixes) {
         if (string.endsWith(suffix + delim))
