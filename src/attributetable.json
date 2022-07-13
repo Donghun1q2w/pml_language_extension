@@ -83,6 +83,8 @@
 			{ "name": "SIZE","object":"array" },
 			{ "name": "LIMITS","object":"array" },
 			{ "name" : "COMPANY","object":"string" },
+			{ "name" : "DESP","object":"array" },
+			{ "name" : "PARA","object":"array" },
 			{ "name" : "COPYRIGHT","object":"string" },
 			{ "name" : "NAME","object":"string" },
 			{ "name" : "NAMN","object":"string" },

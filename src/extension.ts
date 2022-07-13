@@ -9,7 +9,7 @@ import dictionary from './dictionary.json'
 
 export function activate(Context: vscode.ExtensionContext) {
 
-    vscode.workspace.onDidChangeTextDocument(parseKeys);
+    // vscode.workspace.onDidChangeTextDocument(parseKeys);
 
     registerProviders(Context, parseKeys());
     registerCommands(Context)
@@ -57,15 +57,15 @@ function registerProviders(Context: vscode.ExtensionContext, knownVariables: any
     let subscriptions = Context.subscriptions;
     let langs = vscode.languages;
 
-
-    subscriptions.push(langs.registerCompletionItemProvider("pml", new GeneralAttachedMethods()));
-    if(subscriptions.length > 0) return;
-    subscriptions.push(langs.registerCompletionItemProvider("pml", new DocumentMethods(), '!this.'));
-    if(subscriptions.length > 0) return;
-    subscriptions.push(langs.registerDocumentSymbolProvider("pml", new PmlDocumentSymbolProvider()));
-    if(subscriptions.length > 0) return;
-
     subscriptions.push(langs.registerCompletionItemProvider("pml", new GeneralMethods()));
+    subscriptions.push(langs.registerCompletionItemProvider("pml", new GeneralAttachedMethods()));
+    // if(subscriptions.length > 0) return;
+    subscriptions.push(langs.registerCompletionItemProvider("pml", new DocumentMethods(), '!this.'));
+    // if(subscriptions.length > 0) return;
+    subscriptions.push(langs.registerDocumentSymbolProvider("pml", new PmlDocumentSymbolProvider()));
+    // if(subscriptions.length > 0) return;
+
+    
     // subscriptions.push(langs.registerCompletionItemProvider("pml", new VariableMethods(parseKeys())));
 
 }
@@ -83,15 +83,18 @@ class DocumentMethods {
     provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext) {
 
         let methods: Array<vscode.CompletionItem> = [];
-        if (!document.lineAt(position.line).text.replace( /(\s*)/g,"").startsWith('!this.'))
+        if (!document.lineAt(position.line).text.replace( /(\s*)/g,"").startsWith('!this.')||!document.lineAt(position.line).text.toLocaleLowerCase().substring(0,position.character - 1).endsWith('!this'))
             return methods;
-        for (var i = 0; i < document.lineCount; i++) {
-            var line = document.lineAt(i);
-
-            let lineTrimmed: string = line.text.trim();
+        var lines = document.getText().split('\n')
+        .filter(le => 
+            le.trim().toLowerCase().replace( /(\s*)/g,"").startsWith('definemethod.')||le.trim().toLowerCase().replace( /(\s*)/g,"").startsWith('member.'))
+            .map(le=>le.trim().toLowerCase().replace( '  ' , ' ').replace( '\r' ,''));
+        
+        for (var i = 0; i < lines.length; i++) {
+            var lineTrimmed = lines[i];
             if (lineTrimmed.includes('$*')) lineTrimmed=lineTrimmed.split('$')[0].trim();
             if (lineTrimmed.toLowerCase().startsWith("define method .")) {
-                let attName = line.text.substr(15);
+                let attName = lineTrimmed.substr(15);
                 let  methodname:string = attName.split('(')[0];
                 let  input:string = attName.split('(')[1].split(')')[0].trim();
                 let  output:string = attName.split(')')[1].trim();
@@ -114,15 +117,16 @@ class DocumentMethods {
                 if(output!=''){
                     attName += ' {' + seqnum.toString() + ':' + output + '}';
                 }
-
                 methods.push(new vscode.CompletionItem(methodname, vscode.CompletionItemKind.Method));
                 methods[methods.length-1].insertText= new vscode.SnippetString(attName);
             }
-
+            else if (lineTrimmed.toLowerCase().startsWith("member .")){
+                let attName:string = lineTrimmed.split( '.')[1].split( ' ')[0].trim();
+                methods.push(new vscode.CompletionItem(attName, vscode.CompletionItemKind.Method));
+                methods[methods.length-1].insertText= new vscode.SnippetString(attName);
+            }
         }
-
         return methods;
-
     }
 }
 
@@ -136,8 +140,8 @@ class GeneralAttachedMethods {
         if (!cont.substring(0,position.character ).endsWith('.')) return;
         if(variableName.toLowerCase().endsWith(')'))
             type = methodtable.filter( methods => chkmethod(variableName, methods.name.trim().toLowerCase()))[0].object;
-        else if(/!\w+$/g.test(variableName.toLowerCase().replace('this.','')))
-            type =parseKeys().filter( variable => variableName.toLowerCase().replace('this.','').endsWith('!'+variable.name))[0].type;
+        else if(/!\w+$/g.test(variableName.toLowerCase().replace('this.',''))&&(!variableName.toLowerCase().replace('this','').endsWith('!')))
+            type =parseKeys().filter( variable => variableName.toLowerCase().replace('this.','').endsWith('!' + variable.name))[0].type;
         else
             type = attributetable.filter( methods => chkatt(variableName, methods.name.trim().toLowerCase()))[0].object;
         
@@ -251,14 +255,10 @@ function parseKeys():varString[] {
             if (lineCompressed.toLowerCase().startsWith('define ') || lineContent.toLowerCase().startsWith('endmethod')) {
 
                 variables.forEach(function (variable) {
-
-                    //set "unclosed" variables valid until here
                     if (variable.to === null) {
                         variable.to = l;
                     }
-
                 });
-
             }
             while(match = regexmem.exec(lineCompressed))
             {
@@ -320,6 +320,11 @@ function parseKeys():varString[] {
                         || lineCompressed.includes(variableName + "=|")
                         || lineCompressed.includes(variableName + "=string")
                         || lineCompressed.includes(variableName + "=nam")
+                        || lineCompressed.includes(variableName + "=desc")
+                        || lineCompressed.includes(variableName + "=purp")
+                        || lineCompressed.includes(variableName + "=func")
+                        || lineCompressed.includes(variableName + "=type")
+                        || lineCompressed.includes(variableName + "=fprop")
                         || (lineCompressed.startsWith('!' + variableName + '=')&&methodtable.filter(method=>method.object.toLocaleLowerCase()=="string"&&chkmethod(lineCompressed,method.name)).length>0)
                         || (lineCompressed.startsWith('!' + variableName + '=')&&attributetable.filter(attribute=>attribute.object.toLocaleLowerCase()=="string"&&chkatt(lineCompressed,attribute.name.toLocaleLowerCase())).length>0)
                         || lineCompressed.includes('var!' + variableName)
@@ -409,10 +414,11 @@ function parseKeys():varString[] {
                     }
                     var variableName = match[1].toLowerCase().replace( /(\s*)/g,"");
                     var findvarialbe  = variables.filter(variable => (variable.name === variableName));
-                    if ( lineCompressed.includes('=!')&& findvarialbe[0].type==""&& !lineCompressed.includes('=!this'))
+                    if ( findvarialbe.length==0) continue;
+                    if ( lineCompressed.includes("=!")&& findvarialbe[0].type==""&& !lineCompressed.includes("=!this"))
                     {
                         var getva = lineContent.replace( ' = ' , '=' ).split('=')[1].split( ' ')[0].replace('!' ,'').replace('!' ,'')
-                        var findContainedVarialbe  = variables.filter(variable => (variable.name === getva.toLowerCase()));
+                        var findContainedVarialbe  = variables.filter(variable => (variable.name == getva.toLowerCase()));
                         if(findContainedVarialbe.length==0) continue;
                         varString = {
                             name: variableName,
