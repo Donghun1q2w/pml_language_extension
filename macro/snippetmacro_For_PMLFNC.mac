@@ -1,0 +1,68 @@
+
+var !pmllib evar pmllib
+!pmllibs = !pmllib.split(';')
+!pmllibs.unique()
+do !h from 1 to !pmllibs.size()
+   !pmlindex = !pmllibs[$!h] + '\pml.index'
+   !return                             = object array()
+   !file                               = object File( !pmlindex )
+   !data                               = !file.readfile()
+   do !j from 1 to !data.size()
+      skip if ( !data[$!j].matchwild( '*.pmlfnc' ) eq false )
+      skip if ( !data[$!j].lowcase().matchwild( '*shexcelsuppomodelnopip*' ))
+      -- skip if ( !data[$!j].lowcase().matchwild( '*collectallfor*' ) eq false )
+      !pmlfilepath = !!pml.getpathname( !data[$!j].lowcase() )
+      !pmlfile = object file( !pmlfilepath )
+      !pmlfileRead = !pmlfile.readfile()
+      do !line Values !pmlfileRead
+         skip if ( !line.lowcase().matchwild( '*define function*' ) eq false )
+         !scope = !line.lowcase().trim().replace( 'define function' , '' ).replace( '!!' , '' ).before( '(' ).trim()
+         !prefix = !line.after( '!!' ).before( '(' ).trim()
+         !body = !line.after( '!!' ).trim().replace( '(!' , '( !' ).replace( ',' , ' , ' ).Replace( ')' , ' )' )
+         !splitedstr = !body.split()
+         !arg = object Array()
+         do !e to !splitedstr.size()
+            skip if !splitedstr[$!e].lowcase() ne 'is'
+            !str = !splitedstr[!e - 1] + ' ' + !splitedstr[!e] + ' ' + !splitedstr[!e+ 1]
+            handle Any
+               break
+            endhandle
+            break if ( !str eq '' )
+            !arg.append( !str )
+         enddo
+         do !p from 1 to !arg.size()
+            if (  !arg[$!p].Matchwild( ')*' ) ) then
+               !chk = !body.Matchwild( '*$!arg[$!p]*' )
+               !body = !body.replace( !arg[$!p] , ')${' + '$!p' + ':' + !arg[$!p].replace( ') ', '' ) + '}'  )
+            else
+               !body = !body.replace( !arg[$!p] , '${' + '$!p' +':' + !arg[$!p] + '}'  )
+            endif
+         enddo
+         !bodyresult = '!!' + !body.replace( ' (' , '(' ).replace( '  ' , ' ' ).replace( ') ' , ')')
+      enddo
+      !command = object Array()
+      !command.append( '{' )
+      !command.append( '"Print to console": {' )
+      !command.append( '		"scope": "",' )
+      !command.append( '      "prefix": "'+ !scope +'",' )
+      !command.append( '      "body": [' )
+      !command.append( '       "'+!bodyresult+'"' )
+      !command.append( '		],' )
+      !command.append( '		"description": "('+ !body.after( '(' ) +'"' )
+      !command.append( '}' )
+      !command.append( '}' )
+      !fileName = !prefix + '.code-snippets'
+      !commandpath = 'C:\Users\donghun.lee\AppData\Roaming\Code\User\snippets\' + !filename
+      !commandfile = object file(!commandpath)
+      !commandfile.Open('OverWrite')
+      handle Any
+         -- !!Alert.error( |The path is wrong!|)
+         !commandfile.Close()
+         Return
+      EndHandle
+      !commandfile.WriteFile('A', !command.)
+      !commandfile.Close()
+   enddo
+enddo
+!!alert.message('finish!')
+

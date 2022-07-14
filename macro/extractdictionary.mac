@@ -1,0 +1,85 @@
+
+   var !pmllib evar pmllib
+   !pmllibs = !pmllib.split(';')
+   !pmllibs.unique()
+   !command = object Array()
+   do !h from 1 to !pmllibs.size()
+      !pmlindex = !pmllibs[$!h] + '\pml.index'
+      !return                             = object array()
+      !file                               = object File( !pmlindex )
+      !data                               = !file.readfile()
+      do !j from 1 to !data.size()
+         skip if ( !data[$!j].matchwild( '*.pmlobj' ) eq false and !data[$!j].matchwild( '*.pmlfrm' ) eq false)
+         skip if ( !data[$!j].lowcase().matchwild( '*shexcelsuppomodelnopip*' ))
+         -- skip if ( !data[$!j].lowcase().matchwild( '*collectallfor*' ) eq false )
+         !pmlfilepath = !!pml.getpathname( !data[$!j].lowcase() )
+         skip if ( !pmlfilepath.MatchWild( 'C:\PROGRA~2\*') )
+         !pmlfile = object file( !pmlfilepath )
+         !pmlfileRead = !pmlfile.readfile()
+         handle Any
+            q var !pmlfilepath
+            skip
+         endhandle
+         !library = !data[$!j].lowcase().Replace( '.pmlfrm' , '' ).Replace( '.pmlobj' , '' )
+         !methods = object Array()
+         do !line Values !pmlfileRead
+            !method = object array()
+            !inline = !line.split( '$')[1]
+            if !inline.trim().Replace( ' ','').LowCase().MatchWild( 'definemethod.*') then
+               !method[1] = !inline.Replace( ' ','').After( '.')
+               !input = !inline.Replace( ' ','').After( '(').Before( ')' ).split( ',' )
+               !output = !inline.Replace( ' ','').After( ')')
+               !inputnum = 0
+               if ( !input.size().eq(1) and !input[1].eq('') ) then
+                  !method[2] = !inline.Replace( ' ','').Before( '(').After( '.') & '()'
+               elseif ( !input.size().eq(1) and !input[1].neq('')  ) then
+                  !method[2] = !inline.Replace( ' ','').Before( '(').After( '.') & '( ${1:' + !input[1] + '} )'
+                  !inputnum = 1
+               else
+                  !method[2] = !inline.Replace( ' ','').Before( '(').After( '.') & '( ${1:' + !input[1] + '} '
+                  do !t from 2 to !input.size()
+                     !method[2] = !method[2] & ' , ${' & !t.string() & ':' &!input[1] + '}'
+                  enddo
+                  !method[2] = !method[2] & ' )'
+                  !inputnum = !input.sizE()
+               endif
+               if ( !output.neq( '') ) then
+                  !inputnum = !inputnum + 1
+                  !method[2] = !method[2] & '${' & !inputnum.string() & ':' & !output & '}'
+               endif
+            elseif ( !inline.trim().Replace( ' ','').LowCase().MatchWild( 'member.*') ) then
+               !method[1] = !inline.After( '.').part(1).Replace( ' ','')
+               !method[2] = !inline.After( '.').part(1).Replace( ' ','')
+            endif
+            skip if ( !method.empty() )
+            !methods.append( !method )
+         enddo
+         skip if ( !methods.empty() )
+         !command.append( '	{' )
+         !command.append( '		"library": "' & !library & '",' )
+         !command.append( '		"methods": [' )
+         do !m from 1 to !methods.size()
+            !command.append( '		{' )
+            !command.append( '			"label": "' & !methods[!m][1] & '",' )
+            !command.append( '			"snippet": "' & !methods[!m][2] & '",' )
+            !command.append( '			"md": ""' )
+            !command.append( '		}' & iftrue( !m.eq( !methods.MaxIndex() ) , '' , ',' ) )
+         enddo
+         !command.append( '	]' )
+         !command.append( '	},' )
+      enddo
+   enddo
+   q var !command.size()
+   !fileName = 'dic.mac'
+   !commandpath = 'D:\' + !filename
+   !commandfile = object file(!commandpath)
+   !commandfile.Open('OverWrite')
+   handle Any
+      -- !!Alert.error( |The path is wrong!|)
+      !commandfile.Close()
+      Return
+   EndHandle
+   !commandfile.WriteFile('A', !command)
+   !commandfile.Close()
+   !!alert.message('finish!')
+   
