@@ -21,17 +21,18 @@
 
 ### Snippets
 
-  코드 기본 Template 제공
-- **`pmlform`** 
+  코드 Template 제공
+- **`pmlform`**
+- **`pmlformgMar`** Grid를 포함한 pmlfrm , AM용
+- **`pmlformgPDMS`** Grid를 포함한 pmlfrm , PDMS용
 - **`pmlfunc`** 
 - **`pmlmet`** 
 - **`pmlobj`** 
-
-
-- **`pmlbut`** : Creates the basic code for adding a new button on a plm form.
-- **`using namespace`** : Suggests the most commonly used namespaces
+- **`pmlbut`**
+- **`using namespace`** : 자주 사용하는 namespace를 추천
 
 ### 코드 자동완성 기능
 
-- PML object들에 대해 메소드 자동 완성 기능 제공
+- PML object(string, real, array 등)들에 대해 메소드 자동 완성 기능 제공
 - 기본적인 코드 완성 기능 제공
+- 프로그램 특성 상 5000줄 이상의 코드에서는 로딩이 걸릴 수 있습니다.

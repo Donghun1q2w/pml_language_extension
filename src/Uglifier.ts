@@ -50,7 +50,7 @@ export default vscode.commands.registerCommand("extension.pmlUglify", () => {
 
 				varString = match[1];
 
-				if (!variables.hasOwnProperty(varString)) {
+				if (!variables.hasOwnProperty(varString.toLowerCase())) {
 
 					var randVar = "v" + Array.apply(0, Array(20)).map(function () {
 						return (function (charset) {
@@ -60,10 +60,10 @@ export default vscode.commands.registerCommand("extension.pmlUglify", () => {
 
 					newVar = randVar;
 		  
-					setProperty(variables, varString, randVar);
+					setProperty(variables, varString.toLowerCase(), randVar);
 
 				} else {
-					newVar = getProperty(variables, varString);
+					newVar = getProperty(variables, varString.toLowerCase());
 				}
 
 				lineContent = lineContent.replace("!" + varString, "!" + newVar);

@@ -10,10 +10,8 @@
       !data                               = !file.readfile()
       do !j from 1 to !data.size()
          skip if ( !data[$!j].matchwild( '*.pmlobj' ) eq false and !data[$!j].matchwild( '*.pmlfrm' ) eq false)
-         skip if ( !data[$!j].lowcase().matchwild( '*shexcelsuppomodelnopip*' ))
-         -- skip if ( !data[$!j].lowcase().matchwild( '*collectallfor*' ) eq false )
          !pmlfilepath = !!pml.getpathname( !data[$!j].lowcase() )
-         skip if ( !pmlfilepath.MatchWild( 'C:\PROGRA~2\*') )
+         skip if ( !pmlfilepath.MatchWild( 'C:\PROGRA~2\*') ) $* Skip about AVEVA CODE...
          !pmlfile = object file( !pmlfilepath )
          !pmlfileRead = !pmlfile.readfile()
          handle Any
@@ -43,7 +41,7 @@
                   !method[2] = !method[2] & ' )'
                   !inputnum = !input.sizE()
                endif
-               if ( !output.neq( '') ) then
+               if ( !output.trim().neq( '') ) then
                   !inputnum = !inputnum + 1
                   !method[2] = !method[2] & '${' & !inputnum.string() & ':' & !output & '}'
                endif
@@ -59,20 +57,43 @@
          !command.append( '		"library": "' & !library & '",' )
          !command.append( '		"methods": [' )
          do !m from 1 to !methods.size()
-            !command.append( '		{' )
-            !command.append( '			"label": "' & !methods[!m][1] & '",' )
-            !command.append( '			"snippet": "' & !methods[!m][2] & '",' )
-            !command.append( '			"md": ""' )
-            !command.append( '		}' & iftrue( !m.eq( !methods.MaxIndex() ) , '' , ',' ) )
+            !command.append( '			{' )
+            !command.append( '				"label": "' & !methods[!m][1] & '",' )
+            !command.append( '				"snippet": "' & !methods[!m][2] & '",' )
+            !command.append( '				"md": ""' )
+            !command.append( '			}' & iftrue( !m.eq( !methods.MaxIndex() ) , '' , ',' ) )
          enddo
-         !command.append( '	]' )
+         !command.append( '		]' )
          !command.append( '	},' )
       enddo
    enddo
+   !command[!command.MaxIndex()] = !command.Last().Replace( '},' , '}' )
+   !command.Evaluate( object block( |'	' & !command[!evalindex]| ))
+   !command.Insert( 1 ,'[')
+   !command.Append( ']')
    q var !command.size()
-   !fileName = 'dic.mac'
-   !commandpath = 'D:\' + !filename
-   !commandfile = object file(!commandpath)
+   import 'pmlfilebrowser'
+   handle any
+   endhandle
+   !banner = banner
+   if ( matchWild( !banner.name , '*PDMS*' ) ) then
+      !version = 'PDMS'
+   else
+      if ( matchwild( !banner.short , '*Mk3.1*' ) ) then
+         !version = 'E3D 3.1'
+      elseif ( matchwild( !banner.short , '*Mk2.1*' ) ) then
+         !version = 'E3D 2.1'
+      endif
+   endif
+   if ( !version.matchwild( '*E3D*') ) then
+      using namespace 'aveva.core.presentation'
+   else
+      using namespace 'aveva.pdms.presentation'
+   endif
+   
+   !browser         = object pmlfilebrowser ( 'save' )
+   !browser.show( '', 'dictionary_inhouse.json' , 'Inhouse_Dictionary' , false , 'Json|*.json|all|*.*', 1 )
+   !commandfile = object file(!browser.file())
    !commandfile.Open('OverWrite')
    handle Any
       -- !!Alert.error( |The path is wrong!|)

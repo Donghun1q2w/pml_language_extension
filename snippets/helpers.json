@@ -2,7 +2,7 @@
     "using namespace": {
         "prefix": "using namespace",
         "body": [
-            "using namespace '${1|Aveva.Pdms.PMLNet,Aveva.Pdms.Presentation,Aveva.Pdms.Presentation.MyDataAddin,Aveva.Pdms.Presentation.PDMSCommands,Aveva.Core.PMLNet|}'"
+            "using namespace '${1|Aveva.Pdms.PMLNet,Aveva.Core.PMLNet,Aveva.Pdms.Presentation,Aveva.Core.Presentation,Aveva.Pdms.Presentation.MyDataAddin,Aveva.Core.Presentation.MyDataAddin,Aveva.Pdms.Presentation.PDMSCommands,Aveva.Core.Presentation.PDMSCommands,Aveva.Core.PMLNet|}'"
         ],
         "description": "Helper for using namespace"
     },
