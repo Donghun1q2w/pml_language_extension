@@ -125,6 +125,7 @@
 		"isPreReleaseVersion": false
 	},
 	"dependencies": {
+		"vscode": "^1.1.37",
 		"vscode-extension-telemetry": "^0.4.5"
 	}
 }

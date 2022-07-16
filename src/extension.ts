@@ -9,7 +9,7 @@ import dictionary_inhouse from './dictionary_inhouse.json'
 // var dic = Object.assign(dictionary,dictionary_inhouse)
 var dic:any = dictionary
 class varString{ name: string=""; type: string = ""; from: Number=0   ; to: Number| null=null; global: Boolean=false;}
-var variables:varString[]=parseKeys(1);
+var variables:varString[]=[];
 var objectlist:[];
 
 
@@ -20,7 +20,7 @@ export function activate(Context: vscode.ExtensionContext) {
         dic.push(im);
     });
     objectlist = (dic as any).map((dic: { library: any; })=>dic.library.toLowerCase());
-    registerProviders(Context, parseKeys(1));
+    registerProviders(Context, variables);
     registerCommands(Context)
 
 }
@@ -100,28 +100,28 @@ function DocumentMethods(document: vscode.TextDocument, position: vscode.Positio
         return methods;
     var lines = document.getText().split('\n')
     .filter(le =>
-        le.trim().toLowerCase().replace( /(\s*)/g,"").startsWith('definemethod.')||le.trim().toLowerCase().replace( /(\s*)/g,"").startsWith('member.'))
-        .map(le=>le.trim().toLowerCase().replace( '  ' , ' ').replace( '\r' ,''));
+        /^\s*define\s*method\s*\.[a-z][a-z0-9]*/gi.test(le)||/^\s*member\s*\.[a-z][a-z0-9]*\s*is\s*/gi.test(le));
 
     for (var i = 0; i < lines.length; i++) {
-        var lineTrimmed = lines[i];
+        var lineTrimmed = lines[i].trim().replace( /\s+/g , ' ').replace( '\r' ,'');
         if (lineTrimmed.includes('$*')) lineTrimmed=lineTrimmed.split('$')[0].trim();
-        if (lineTrimmed.toLowerCase().startsWith("define method .")) {
+        if (/^\s*define\s*method\s*\.[a-z][a-z0-9]*/gi.test(lineTrimmed)) {
             let attName = lineTrimmed.substr(15);
             let  methodname:string = attName.split('(')[0];
             let  input:string = attName.split('(')[1].split(')')[0].trim();
             let  output:string = attName.split(')')[1].trim();
             let seqnum:number = 1;
             if(input!=''){
-                if(input.split(',').length>2){
+                if(input.split(',').length<2){
                     attName = methodname + '( ${1:' + input + '} )';
+                    seqnum++;
                 }
                 else{
                     attName = methodname + '( ${1:' + input.split(',')[0].trim() + '}';
                     for( var j=1;j<input.split(',').length;j++){
                         let num:number = j + 1;
                         attName = attName + ' , ${'+num.toString()+':' + input.split(',')[j].trim() + '}';
-                        seqnum  = j + 1;
+                        seqnum  = num + 1;
                     }
                     attName = attName + ' )';
                 }
@@ -133,7 +133,7 @@ function DocumentMethods(document: vscode.TextDocument, position: vscode.Positio
             methods.push(new vscode.CompletionItem(methodname, vscode.CompletionItemKind.Method));
             methods[methods.length-1].insertText= new vscode.SnippetString(attName);
         }
-        else if (lineTrimmed.toLowerCase().startsWith("member .")){
+        else if (/^\s*member\s*\.[a-z][a-z0-9]*\s*is\s*/gi.test(lineTrimmed)){
             let attName:string = lineTrimmed.split( '.')[1].split( ' ')[0].trim();
             methods.push(new vscode.CompletionItem(attName, vscode.CompletionItemKind.Field));
             methods[methods.length-1].insertText= new vscode.SnippetString(attName);
@@ -301,14 +301,15 @@ function parseKeys(currentLineNo:number):varString[]{
             variables = AssignVar( variableName ,type , 0 , 1000 ,true, variables);
         }
     }
+    var chk = false;
     //getMember of form or object
     var getmethod = lines.filter(line=>/^\s*define\s*method\s*\.[a-z][a-z0-9]*\s*\(/gi.test(line)).map(ll=>{
         return ll.replace( /\\r/gi ,'').replace(/\s+/gi , ' ').replace(/\$\*[a-z 0-9.!@#$%^&*()_\-,<>/{}\\|";'?`~.+=]*/gi,'').trim();
     });
+    var chk = true;
     for(let i=0;i<getmethod.length;i++){
         var input = getmethod[i].split('(')[1].split(')')[0];
         var output = getmethod[i].split(')')[1];
-        console.log(getmethod[i]);
         if(input.trim()!=''){
             var inputList = input.split(',');
             for(let l=0;l<inputList.length;l++){
@@ -331,30 +332,19 @@ function parseKeys(currentLineNo:number):varString[]{
     }
 
     //in method to upper
-    for(let i=currentLineNo ;i<lines.length;i++){
+    for(let i=currentLineNo ;i>=0;i--){
         if(/^\s*define\s*method\s*.[a-z]*/gi.test(lines[i])||/^\s*endmethod\s*/gi.test(lines[i])) break;
         if(starts(lines[i] , fil) || /^[\s]*$/gi.test(lines[i])) continue;
         var lineContent = lines[i];
         console.log(lineContent);
-        let vs = /^\s*[!]*![a-z][a-z0-9]*[ =	]/gi.exec(lineContent);
+        let vs = /^\s*[!]*![a-z][a-z0-9]*/gi.exec(lineContent);
         if(vs==null) continue;
         let variable = vs[0].replace(/!*/gi,'').replace(/\s*/g,'');
         type = GetType(lineContent,variable.toLowerCase());
         variables = AssignVar( variable ,type , 0 , document.document.lineCount ,/^!!/g.test(vs[0]), variables);
     }
     //in method to upper
-    //in method to lower
-    for(let i=currentLineNo ;i>0;i--){
-        if(/^\s*define\s*method\s*.[a-z]*/gi.test(lines[i])||/^\s*endmethod\s*/gi.test(lines[i])) break;
-        if(starts(lines[i] , fil) || /^[\s]*$/gi.test(lines[i])) continue;
-        var lineContent = lines[i];
-        let vs = /^\s*[!]*![a-z][a-z0-9]*[ =	]/gi.exec(lineContent);
-        if(vs==null) continue;
-        let variable = vs[0].replace(/!*/gi,'').replace(/\s*/g,'');
-        type = GetType(lineContent,variable.toLowerCase());
-        variables = AssignVar( variable ,type , 0 , document.document.lineCount ,/^!!/g.test(vs[0]), variables);
-    }
-    //in method to lower
+    // lower code is no need
 
     return variables;
 }
