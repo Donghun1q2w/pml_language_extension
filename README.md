@@ -34,7 +34,7 @@
 ### 코드 자동완성 기능
 
 - PML object(string, real, array 등)들에 대해 메소드 자동 완성 기능 제공
--  ![Animation](https://user-images.githubusercontent.com/90903869/179336718-c9c04a61-ab46-4473-af82-34391664b265.gif)
--  ![Animation1](https://user-images.githubusercontent.com/90903869/179336727-04e6900e-4c2b-456f-8cac-143c34c68384.gif)
+  ![Animation](https://user-images.githubusercontent.com/90903869/179336718-c9c04a61-ab46-4473-af82-34391664b265.gif)
+  ![Animation1](https://user-images.githubusercontent.com/90903869/179336727-04e6900e-4c2b-456f-8cac-143c34c68384.gif)
 - 기본적인 코드 완성 기능 제공
 
