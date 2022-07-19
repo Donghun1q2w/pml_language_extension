@@ -91,6 +91,8 @@ class GetObjectList{
         methods = GeneralMethods(document,position,token,context , variables);
         if ( methods.length!=0)return methods;
         methods = GeneralAttachedMethods(document,position,token,context,variables);
+        if ( methods.length!=0)return methods;
+        methods = GetMethod(document,position,token,context,variables);
         return methods;
     }
 }
@@ -153,7 +155,9 @@ function GeneralAttachedMethods(document: vscode.TextDocument, position: vscode.
     if(variableName.toLowerCase().endsWith(')')){
         var temptype = methodtable.filter( methods => chkmethod(variableName, methods.name.trim().toLowerCase()));
         if(temptype.length==0){
-            type = variables.filter(methods => chkmethod(variableName.toLowerCase(), methods.name.trim().toLowerCase()))[0].type;
+            var tempt = variables.filter(methods => chkmethod(variableName.toLowerCase(), methods.name.trim().toLowerCase()));
+            if(tempt.length!=0)
+            type = tempt[0].type;
         }
         else
             type = temptype[0].object;
@@ -162,7 +166,7 @@ function GeneralAttachedMethods(document: vscode.TextDocument, position: vscode.
         type =variables.filter( variable => variableName.toLowerCase().replace('this.','').endsWith('!' + variable.name.toLowerCase()))[0].type;
     else
         type = attributetable.filter( methods => chkatt(variableName.toLowerCase(), methods.name.trim().toLowerCase()))[0].object;
-
+    if (type=='') return Methods;
     let filteredMethods = (dic as any).filter((methods: { library: string; }) => methods.library.toLowerCase() === type.toLowerCase());
     Methods = (filteredMethods[0].methods).map((method: { label: string; snippet: string | undefined; md: string | undefined; }) => {
         let chkmethod =  method.snippet?.includes('(');
@@ -178,6 +182,60 @@ function GeneralAttachedMethods(document: vscode.TextDocument, position: vscode.
 
 }
 
+function GetMethod(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext,variables:varString[]){
+    var cont = document.lineAt(position.line).text;
+    let Methods: Array<vscode.CompletionItem> = [];
+    let code = "";
+    let type = '';
+    let bracket1 = 0; // (
+    let bracket2 = 0; // )
+    let bracket3 = false; // '
+    let bracket4 = false; // |
+    for( let i = 0; i<cont.length ;i++ )
+    {
+        let strnum = cont.length - 1 - i;
+        let cha = cont.substring(strnum - 1,strnum);
+        if(cha=='(')  bracket1++;
+        if(cha==')')  bracket2++;
+        if(cha=='\'')  bracket3=!bracket3;
+        if(cha=='|')  bracket4=!bracket4;
+        if(bracket3||bracket4)continue;
+        if(bracket1!=bracket2)continue;
+        if( cha=="!") break;
+        code = cha + code;
+    }
+    if (code.toLowerCase().replace('this.','')==''
+        ) return Methods;
+    let methods:string[] = code.toLowerCase().replace('this.','').split('.');
+    if (methods.length<2) return Methods;
+    let initFilteredVar = variables.filter(varr=>varr.name.toLowerCase()==methods[0].toLowerCase());
+    if(initFilteredVar.length>0)type=initFilteredVar[0].type;
+
+    for(let i=1;i<methods.length - 1;i++){
+        if(type!=''){
+            let getlibrary = dic.filter((dd: { library: string; })=>dd.library.toLowerCase()==type.toLowerCase());
+            if(getlibrary.length==0){type='';continue; }
+            let getmethod = getlibrary[0].methods.filter((dd: { label: string;snippet: string;md: string; })=>dd.label.toLowerCase().startsWith(methods[i].toLowerCase().split('(')[0]));
+            if(getmethod.length==0){type='';continue; }
+            let gettypes = objectlist.filter(object=>getmethod[0].snippet.toLocaleLowerCase().replace(/\s+/gi , '').endsWith(object.toLowerCase()+'}'));
+            if(gettypes.length==0){type='';continue; }
+            type = gettypes[0];
+        }
+    }
+
+    Methods = (dic.filter((lib: { library: string; })=>lib.library.toLocaleLowerCase()==type)[0].methods).filter(met=>met.label.toLowerCase().startsWith(methods[methods.length -1 ].toLowerCase())).map((method: { label: string; snippet: string | undefined; md: string | undefined; }) => {
+        let chkmethod =  method.snippet?.includes('(');
+        let item = new vscode.CompletionItem(method.label, chkmethod?vscode.CompletionItemKind.Method:vscode.CompletionItemKind.Field);
+        if (method.snippet)
+            item.insertText = new vscode.SnippetString(method.snippet);
+        if (method.md)
+            item.documentation = new vscode.MarkdownString(method.md);
+        return item;
+    });
+    return Methods;
+
+}
+
 function GeneralMethods(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext ,variables:varString[]) {
     var cont = document.lineAt(position.line).text;
     let Methods: Array<vscode.CompletionItem> = [];
@@ -188,7 +246,9 @@ function GeneralMethods(document: vscode.TextDocument, position: vscode.Position
         if( cont.substring(strnum,strnum+1)=="!") break;
         variableName = cont.substring(strnum,strnum+1) + variableName;
     }
-    if (variableName.toLowerCase().replace('this.','').includes('.')) return Methods;
+    if (variableName.toLowerCase().replace('this.','')
+        ||variableName.toLowerCase().replace('this.','')==''
+        ) return Methods;
     else if (variableName.toLowerCase()==='this')return Methods;
     let vatype = variables.filter( variable => variable.name.toLowerCase() === variableName.toLowerCase().replace('this.',''));
     if(vatype.length==0) return Methods;
@@ -337,7 +397,7 @@ function parseKeys(currentLineNo:number):varString[]{
         if(starts(lines[i] , fil) || /^[\s]*$/gi.test(lines[i])) continue;
         var lineContent = lines[i];
         console.log(lineContent);
-        let vs = /^\s*[!]*![a-z][a-z0-9]*/gi.exec(lineContent);
+        let vs = /[!]+[a-z][a-z0-9]*/gi.exec(lineContent);
         if(vs==null) continue;
         let variable = vs[0].replace(/!*/gi,'').replace(/\s*/g,'');
         type = GetType(lineContent,variable.toLowerCase());
@@ -357,102 +417,106 @@ function GetType(line:string,variableName:string){
     var RealRegex = new RegExp("!" + variableName + "\\s*=\\s*\\d+$", 'g');
     type = GetObject(lineContent,variableName,objectlist);
 
-    if( type == '')
-    {
-        if (/=\s*!!collectall\w+\s*\([\s|\w,'()!*]*\)$/g.test(lineContent)
-        || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="array"&&chkmethod(lineContent,method.name)))
-        || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="array"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
-        || ArrayRegex.exec(lineContent)
-        || lineContent.includes('var!' + variableName + 'coll')
-        || lineContent.includes('var!' + variableName + 'eval')
-        ) {
-            type = "array";
-        }
-        else if (lineContent.includes('!' + variableName + '=true')
-        || lineContent.includes('!' + variableName + '=false')
-        || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="boolean"&&chkmethod(lineContent,method.name)))
-        || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="boolean"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
-        ) {
-            type = "boolean";
-        }
-        else if (lineContent.includes(variableName + "='")
-        || contains(lineContent , [variableName + "=|"
-        , variableName + "=string",
-        variableName + "=nam",
-        variableName + "=desc",
-        variableName + "=purp",
-        variableName + "=func",
-        variableName + "=stext",
-        variableName + "=type",
-        variableName + "=fprop"])
-        || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="string"&&chkmethod(lineContent,method.name)))
-        || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="string"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
-        || lineContent.includes('var!' + variableName)
-        ) {
-            type = "string";
-        }
-        else if (lineContent.includes('!' + variableName + 'isgadget')) {
-            type = "gadget";
-        }
-        else if (RealRegex.exec(lineContent)
-        ||lineContent.includes('!' + variableName + 'real')
-        || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="real"&&chkmethod(lineContent,method.name)))
-        || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="real"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
-        ) {
-            type = "real";
-        }
-        else if (lineContent.includes('!' + variableName + 'isany')) {
-            type = "any";
-        }
-        else if (lineContent.includes('!' + variableName + '=currentproject')) {
-            type = "project";
-        }
-        else if ((lineContent.startsWith('!' + variableName + '=')&&lineContent.endsWith(".position"))
-        || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="position"&&chkmethod(lineContent,method.name)))
-        || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="position"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
-        ||HasVarialbe(lineContent,variableName,['.pos.wrt(world)',
-        '.pos',
-        'isposition',
-        'startwrt/*',
-        'endwrt/*',
-        'poswrt/*',
-        'posewrt/*',
-        'posswrt/*'])
-        ){
-            type = "position";
-        }
-        else if ( lineContent.includes(variableName + "=ce")
-        || lineContent.includes(variableName + "=ref")
-        || lineContent.includes(variableName + "=/")
-        || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="dbref"&&chkmethod(lineContent,method.name)))
-        || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="dbref"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
-        || (lineContent.startsWith('!' + variableName + '=')&&lineContent.endsWith("!!ce"))
-        || contains( lineContent, [variableName + "=own",
-        variableName + "=pre",
-        variableName + "=site",
-        variableName + "=zone",
-        variableName + "=rest",
-        variableName + "=stru",
-        variableName + "=dbref(",
-        variableName + "=hang",
-        variableName + "=spref",
-        variableName + "=catref",
-        variableName + "=nex"])
-        || /=\s*!!collectall\w*\s*\([\s|\w,'()!?*]*\)\[\$*!*\d*\w*\]$/g.test(lineContent)
-        ){
-            type = "DBRef";
-        }
-        else if ( (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="orientation"&&chkmethod(lineContent,method.name)))
-        || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="orientation"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
-        || lineContent.includes(variableName + "=ori")
-        ){
-            type = "orientation";
-        }
-        else if ( lineContent.includes(variableName + "=currentsession'")
-        ){
-            type = "session";
-        }
+    if( type != '')
+     return type;
+    if (/=\s*!!collectall\w+\s*\([\s|\w,'()!*]*\)$/g.test(lineContent)
+    || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="array"&&chkmethod(lineContent,method.name)))
+    || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="array"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
+    || ArrayRegex.exec(lineContent)
+    || lineContent.includes('var!' + variableName + 'coll')
+    || lineContent.includes('var!' + variableName + 'eval')
+    ) {
+        type = "array";
     }
+    else if (lineContent.includes('!' + variableName + '=true')
+    || lineContent.includes('!' + variableName + '=false')
+    || lineContent.includes('!' + variableName + '=T')
+    || lineContent.includes('!' + variableName + '=F')
+    || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="boolean"&&chkmethod(lineContent,method.name)))
+    || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="boolean"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
+    ) {
+        type = "boolean";
+    }
+    else if (lineContent.includes(variableName + "='")
+    || contains(lineContent , [variableName + "=|"
+    , variableName + "=string",
+    variableName + "=nam",
+    variableName + "=desc",
+    variableName + "=purp",
+    variableName + "=func",
+    variableName + "=stext",
+    variableName + "=type",
+    variableName + "=fprop"])
+    || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="string"&&chkmethod(lineContent,method.name)))
+    || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="string"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
+    || lineContent.includes('var!' + variableName)
+    ) {
+        type = "string";
+    }
+    else if (lineContent.includes('!' + variableName + 'isgadget')) {
+        type = "gadget";
+    }
+    else if (RealRegex.exec(lineContent)
+    ||lineContent.includes('!' + variableName + 'real')
+    || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="real"&&chkmethod(lineContent,method.name)))
+    || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="real"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
+    ) {
+        type = "real";
+    }
+    else if (lineContent.includes('!' + variableName + 'isany')) {
+        type = "any";
+    }
+    else if (lineContent.includes('!' + variableName + '=currentproject')) {
+        type = "project";
+    }
+    else if ((lineContent.startsWith('!' + variableName + '=')&&lineContent.endsWith(".position"))
+    || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="position"&&chkmethod(lineContent,method.name)))
+    || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="position"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
+    ||HasVarialbe(lineContent,variableName,['.pos.wrt(world)',
+    '.pos',
+    'pos',
+    'pos.wrt(world)',
+    'isposition',
+    'startwrt/*',
+    'endwrt/*',
+    'poswrt/*',
+    'posewrt/*',
+    'posswrt/*'])
+    ){
+        type = "position";
+    }
+    else if ( lineContent.includes(variableName + "=ce")
+    || lineContent.includes(variableName + "=ref")
+    || lineContent.includes(variableName + "=/")
+    || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="dbref"&&chkmethod(lineContent,method.name)))
+    || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="dbref"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
+    || (lineContent.startsWith('!' + variableName + '=')&&lineContent.endsWith("!!ce"))
+    || contains( lineContent, [variableName + "=own",
+    variableName + "=pre",
+    variableName + "=site",
+    variableName + "=zone",
+    variableName + "=rest",
+    variableName + "=stru",
+    variableName + "=dbref(",
+    variableName + "=hang",
+    variableName + "=spref",
+    variableName + "=catref",
+    variableName + "=nex"])
+    || /=\s*!!collectall\w*\s*\([\s|\w,'()!?*]*\)\[\$*!*\d*\w*\]$/g.test(lineContent)
+    ){
+        type = "DBRef";
+    }
+    else if ( (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="orientation"&&chkmethod(lineContent,method.name)))
+    || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="orientation"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
+    || lineContent.includes(variableName + "=ori")
+    ){
+        type = "orientation";
+    }
+    else if ( lineContent.includes(variableName + "=currentsession'")
+    ){
+        type = "session";
+    }
+    
     return type;
 }
 function AssignVar( variableName: string , type: string , from : Number , to : any , global: boolean , variables : varString[]){
