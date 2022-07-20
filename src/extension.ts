@@ -93,6 +93,8 @@ class GetObjectList{
         methods = GeneralAttachedMethods(document,position,token,context,variables);
         if ( methods.length!=0)return methods;
         methods = GetMethod(document,position,token,context,variables);
+        if ( methods.length!=0)return methods;
+        methods = GetMethodInternal(document,position,token,context,variables);
         return methods;
     }
 }
@@ -105,8 +107,13 @@ function DocumentMethods(document: vscode.TextDocument, position: vscode.Positio
         /^\s*define\s*method\s*\.[a-z][a-z0-9]*/gi.test(le)||/^\s*member\s*\.[a-z][a-z0-9]*\s*is\s*/gi.test(le));
 
     for (var i = 0; i < lines.length; i++) {
-        var lineTrimmed = lines[i].trim().replace( /\s+/g , ' ').replace( '\r' ,'');
-        if (lineTrimmed.includes('$*')) lineTrimmed=lineTrimmed.split('$')[0].trim();
+        let orilineTrimmed:string = lines[i].trim().replace( /\s+/g , ' ').replace( '\r' ,'');
+        let lineTrimmed:string = orilineTrimmed;
+        let desc:string = '';
+        if (orilineTrimmed.includes('$*')) {
+            lineTrimmed=orilineTrimmed.split('$')[0].trim();
+            desc = orilineTrimmed.split('$')[1].trim();
+        }
         if (/^\s*define\s*method\s*\.[a-z][a-z0-9]*/gi.test(lineTrimmed)) {
             let attName = lineTrimmed.substr(15);
             let  methodname:string = attName.split('(')[0];
@@ -133,12 +140,25 @@ function DocumentMethods(document: vscode.TextDocument, position: vscode.Positio
                 attName += '${' + seqnum.toString() + ':' + output + '}';
             }
             methods.push(new vscode.CompletionItem(methodname, vscode.CompletionItemKind.Method));
-            methods[methods.length-1].insertText= new vscode.SnippetString(attName);
+            methods[methods.length-1].insertText= new vscode.SnippetString(attName.split('(')[0]);
+            let markdown:vscode.MarkdownString = new vscode.MarkdownString();
+            markdown.appendMarkdown('(method) ' + attName.replace(/\$\{\d\:/gi , '').replace(/\}/gi,''));
+            markdown.appendMarkdown('\n');
+            markdown.appendMarkdown('\n---\n');
+            markdown.appendMarkdown(desc);
+            methods[methods.length-1].documentation = markdown;
         }
         else if (/^\s*member\s*\.[a-z][a-z0-9]*\s*is\s*/gi.test(lineTrimmed)){
             let attName:string = lineTrimmed.split( '.')[1].split( ' ')[0].trim();
+            let output:string =lineTrimmed.split( '.')[1].split( ' ')[2].split('$')[0].trim();
             methods.push(new vscode.CompletionItem(attName, vscode.CompletionItemKind.Field));
-            methods[methods.length-1].insertText= new vscode.SnippetString(attName);
+            methods[methods.length-1].insertText= new vscode.SnippetString(attName.split('(')[0]);
+            let markdown:vscode.MarkdownString = new vscode.MarkdownString();
+            markdown.appendMarkdown('(member) ' + attName.replace(/\$\{\d\:/gi , '').replace(/\}/gi,'') + ' : ' + output);
+            markdown.appendMarkdown('\n');
+            markdown.appendMarkdown('\n---\n');
+            markdown.appendMarkdown(desc);
+            methods[methods.length-1].documentation = markdown;
         }
     }
     return methods;
@@ -168,18 +188,31 @@ function GeneralAttachedMethods(document: vscode.TextDocument, position: vscode.
         type = attributetable.filter( methods => chkatt(variableName.toLowerCase(), methods.name.trim().toLowerCase()))[0].object;
     if (type=='') return Methods;
     let filteredMethods = (dic as any).filter((methods: { library: string; }) => methods.library.toLowerCase() === type.toLowerCase());
-    Methods = (filteredMethods[0].methods).map((method: { label: string; snippet: string | undefined; md: string | undefined; }) => {
+    Methods = (filteredMethods[0].methods).map((method: { label: string; snippet: string ; md: string ; }) => {
         let chkmethod =  method.snippet?.includes('(');
         let item = new vscode.CompletionItem(method.label, chkmethod?vscode.CompletionItemKind.Method:vscode.CompletionItemKind.Field);
         if (method.snippet)
-            item.insertText = new vscode.SnippetString(method.snippet);
+            item.insertText = new vscode.SnippetString(method.snippet.split('(')[0]);
         if (method.md)
-            item.documentation = new vscode.MarkdownString(method.md);
+            item.documentation = getMarkDown(method);
         return item;
     });
     return Methods;
 
 
+}
+function getMarkDown(method:{ label: string; snippet: string  ; md: string ; }):vscode.MarkdownString{
+    let aa:vscode.MarkdownString = new vscode.MarkdownString();
+    let chkmethod =  method.snippet?.includes('(');
+    let sn:any = method.snippet.replace(/\$\{\d\:/gi , '').replace(/\}/gi,'').replace( /\)is\s*/gi ,') :');
+    let pref = chkmethod?'(method) ':'(attribute) ';
+    aa.appendMarkdown(pref + sn);
+    aa.appendMarkdown("\n");
+    aa.appendMarkdown("\n---\n");
+    aa.appendMarkdown(method.md);
+    aa.isTrusted = true;
+    return aa;
+    // item.documentation.appendMarkdown('<span style="color:#1EA4FF;background-color:#757575;">**'+method.snippet+'**</span> ');
 }
 
 function GetMethod(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext,variables:varString[]){
@@ -212,24 +245,103 @@ function GetMethod(document: vscode.TextDocument, position: vscode.Position, tok
     if(initFilteredVar.length>0)type=initFilteredVar[0].type;
 
     for(let i=1;i<methods.length - 1;i++){
+
         if(type!=''){
+            let getattlist = attributetable.filter(att=>att.name.toLowerCase()==methods[i].toLowerCase());
+            if(getattlist.length>0) {type = getattlist[0].object.toLowerCase();continue;}
+            let getmethodlist = methodtable.filter(met=>met.name.toLowerCase()==methods[i].toLowerCase())
+            if(getmethodlist.length>0) {type = getmethodlist[0].object.toLowerCase();continue;}
             let getlibrary = dic.filter((dd: { library: string; })=>dd.library.toLowerCase()==type.toLowerCase());
             if(getlibrary.length==0){type='';continue; }
             let getmethod = getlibrary[0].methods.filter((dd: { label: string;snippet: string;md: string; })=>dd.label.toLowerCase().startsWith(methods[i].toLowerCase().split('(')[0]));
             if(getmethod.length==0){type='';continue; }
-            let gettypes = objectlist.filter(object=>getmethod[0].snippet.toLocaleLowerCase().replace(/\s+/gi , '').endsWith(object.toLowerCase()+'}'));
+            let gettypes = objectlist.filter(object=>{
+                return getmethod[0].snippet.toLocaleLowerCase().replace(/\s+/gi, '').endsWith(object.toLowerCase() + '}');
+            });
             if(gettypes.length==0){type='';continue; }
             type = gettypes[0];
         }
+        if(type==''){
+            
+        }
+
+
     }
 
-    Methods = (dic.filter((lib: { library: string; })=>lib.library.toLocaleLowerCase()==type)[0].methods).filter(met=>met.label.toLowerCase().startsWith(methods[methods.length -1 ].toLowerCase())).map((method: { label: string; snippet: string | undefined; md: string | undefined; }) => {
+    Methods = (dic.filter((lib: { library: string; })=>lib.library.toLocaleLowerCase()==type)[0].methods).filter(met=>met.label.toLowerCase().startsWith(methods[methods.length -1 ].toLowerCase())).map((method: { label: string; snippet: string ; md: string ; }) => {
         let chkmethod =  method.snippet?.includes('(');
         let item = new vscode.CompletionItem(method.label, chkmethod?vscode.CompletionItemKind.Method:vscode.CompletionItemKind.Field);
         if (method.snippet)
-            item.insertText = new vscode.SnippetString(method.snippet);
+            item.insertText = new vscode.SnippetString(method.snippet.split('(')[0]);
         if (method.md)
-            item.documentation = new vscode.MarkdownString(method.md);
+            item.documentation = getMarkDown(method);
+        return item;
+    });
+    return Methods;
+
+}
+function GetMethodInternal(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext,variables:varString[]){
+    var cont = document.lineAt(position.line).text;
+    let Methods: Array<vscode.CompletionItem> = [];
+    let code = "";
+    let type = '';
+    let bracket1 = 0; // (
+    let bracket2 = 1; // )
+    let bracket3 = false; // '
+    let bracket4 = false; // |
+    for( let i = 0; i<cont.length ;i++ )
+    {
+        let strnum = cont.length - 1 - i;
+        let cha = cont.substring(strnum - 1,strnum);
+        if(cha=='(')  bracket1++;
+        if(cha==')')  bracket2++;
+        if(cha=='\'')  bracket3=!bracket3;
+        if(cha=='|')  bracket4=!bracket4;
+        if(bracket3||bracket4)continue;
+        if(bracket1!=bracket2)continue;
+        if( cha=="!") break;
+        code = cha + code.replace(    );
+    }
+    if (code.toLowerCase().replace('this.','')==''
+        ) return Methods;
+    let methods:string[] = code.toLowerCase().replace('this.','').split('.');
+    if (methods.length<2) return Methods;
+    let initFilteredVar = variables.filter(varr=>varr.name.toLowerCase()==methods[0].toLowerCase());
+    if(initFilteredVar.length>0)type=initFilteredVar[0].type;
+
+    for(let i=1;i<methods.length - 1;i++){
+
+        if(type!=''){
+            let getattlist = attributetable.filter(att=>att.name.toLowerCase()==methods[i].toLowerCase());
+            if(getattlist.length>0) {type = getattlist[0].object.toLowerCase();continue;}
+            let getmethodlist = methodtable.filter(met=>met.name.toLowerCase()==methods[i].toLowerCase())
+            if(getmethodlist.length>0) {type = getmethodlist[0].object.toLowerCase();continue;}
+            let getlibrary = dic.filter((dd: { library: string; })=>dd.library.toLowerCase()==type.toLowerCase());
+            if(getlibrary.length==0){type='';continue; }
+            let getmethod = getlibrary[0].methods.filter((dd: { label: string;snippet: string;md: string; })=>dd.label.toLowerCase().startsWith(methods[i].toLowerCase().split('(')[0]));
+            if(getmethod.length==0){type='';continue; }
+            let gettypes = objectlist.filter(object=>{
+                return getmethod[0].snippet.toLocaleLowerCase().replace(/\s+/gi, '').endsWith(object.toLowerCase() + '}');
+            });
+            if(gettypes.length==0){type='';continue; }
+            type = gettypes[0];
+        }
+        if(type==''){
+            
+        }
+
+
+    }
+
+    Methods = (dic.filter((lib: { library: string; })=>lib.library.toLocaleLowerCase()==type)[0].methods).filter(met=>met.label.toLowerCase().startsWith(methods[methods.length -1 ].toLowerCase())).map((method: { label: string; snippet: string ; md: string ; }) => {
+        let chkmethod =  method.snippet?.includes('(');
+        let item = new vscode.CompletionItem(method.label, chkmethod?vscode.CompletionItemKind.Method:vscode.CompletionItemKind.Field);
+        if (method.snippet)
+            item.insertText = new vscode.SnippetString(method.snippet.split('(')[0]);
+        if (method.md)
+            item.documentation = getMarkDown(method);
+            item.
+
         return item;
     });
     return Methods;
@@ -254,13 +366,13 @@ function GeneralMethods(document: vscode.TextDocument, position: vscode.Position
     if(vatype.length==0) return Methods;
     const filteredGeneralMethods = (dic as any).filter((methods: { library: string; }) => methods.library.toLowerCase() === vatype[0].type.toLowerCase());
     if(filteredGeneralMethods.length==0) return Methods;
-    Methods = (filteredGeneralMethods[0].methods).map((method: { label: string; snippet: string | undefined; md: string | undefined; }) => {
+    Methods = (filteredGeneralMethods[0].methods).map((method: { label: string; snippet: string ; md: string ; }) => {
         let chkmethod =  method.snippet?.includes('(');
         let item = new vscode.CompletionItem(method.label, chkmethod?vscode.CompletionItemKind.Method:vscode.CompletionItemKind.Field);
         if (method.snippet)
-            item.insertText = new vscode.SnippetString(method.snippet);
+            item.insertText = new vscode.SnippetString(method.snippet.split('(')[0]);
         if (method.md)
-            item.documentation = new vscode.MarkdownString(method.md);
+            {item.documentation = getMarkDown(method);}
         return item;
     });
     return Methods;
@@ -269,11 +381,12 @@ function GeneralMethods(document: vscode.TextDocument, position: vscode.Position
 function contains(target:string, pattern: any[]){
     let value:boolean = false;
     pattern.forEach(function(word){
-        if(target.includes(word)){
-            return true;
+        if(target.toLowerCase().includes(word.toLowerCase())){
+            value = true;
         }
         else
             value = value;
+        if (value==true) return;
     });
     return value;
 }
@@ -446,6 +559,10 @@ function GetType(line:string,variableName:string){
     variableName + "=func",
     variableName + "=stext",
     variableName + "=type",
+    variableName + "=replace(",
+    variableName + "=subs",
+    variableName + "=after",
+    variableName + "=befor",
     variableName + "=fprop"])
     || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="string"&&chkmethod(lineContent,method.name)))
     || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="string"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
