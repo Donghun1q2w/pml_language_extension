@@ -6,12 +6,12 @@ import methodtable from './methodtable.json'
 import attributetable from './attributetable.json'
 import dictionary from './dictionary.json'
 import dictionary_inhouse from './dictionary_inhouse.json'
-// var dic = Object.assign(dictionary,dictionary_inhouse)
+import { type } from 'os';
 var dic:any = dictionary
 class varString{ name: string=""; type: string = ""; from: Number=0   ; to: Number| null=null; global: Boolean=false;}
 var variables:varString[]=[];
 var objectlist:[];
-
+var line:number;
 
 export function activate(Context: vscode.ExtensionContext) {
 
@@ -23,15 +23,75 @@ export function activate(Context: vscode.ExtensionContext) {
     registerProviders(Context, variables);
     registerCommands(Context)
 
-}
+    Context.subscriptions.push(
+        vscode.languages.registerSignatureHelpProvider(
+            'pml', new PmlSignatureHelpProvider(), '(', ','));
 
+}
+class PmlSignatureHelpProvider implements vscode.SignatureHelpProvider {
+    public provideSignatureHelp(
+        document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken):
+        Thenable<vscode.SignatureHelp> {
+            if(line!=position.line)
+                variables=parseKeys(position.line);
+            line = position.line;
+            var cont = document.lineAt(position.line).text.substring(0,position.character);
+            let inputnum = getCurrentStage(cont);
+            return new Promise((resolve)=>{
+                let methodset:{ Type:string;Methods:string[] } = GetMethodOutputType(document,position,token,undefined,variables,true);
+                let methods = methodset.Methods;
+                let tempMethods:Array<vscode.SignatureInformation> = (dic.filter((lib: { library: string; })=>lib.library.toUpperCase()==methodset.Type.toUpperCase())[0].methods)
+                        .filter((met: { label: string; })=>met.label.split('(')[0].toLowerCase()==methods[methods.length -1 ].toLowerCase()&&(met.label.split(',').length>=inputnum+2||((inputnum==-1&&met.label.split(',').length==inputnum+1)||(inputnum==0&&!/\(\s*\)/gi.test(met.label)))))
+                        .map((method: { label: string; snippet: string ; md: string ; }) => {
+                        let item = new vscode.SignatureInformation(method.snippet.replace(/\$\{\s*\d*\s*\:/gi,'').replace(/\}/gi,''));
+                        item.parameters = getInputParameter(method.snippet , method.md , inputnum);
+                        item.parameters
+                        return item;
+                    });
+                let a = new vscode.SignatureHelp();
+                a.signatures = tempMethods;
+                return resolve(a);
+            });
+    }
+}
+function getCurrentStage(line:string):number{
+
+    let bracket1 = 0; // (
+    let bracket2 = 0; // )
+    let bracket3 = false; // '
+    let bracket4 = false; // |
+    let comnum = 0 ;
+    let lett = '';
+    for(let i=line.length-1;i>=0;i--){
+        let cha = line.substring(i,i+1);
+        if(cha=='(')  {bracket1++;continue;}
+        else if(cha==')')  {bracket2++;continue;}
+        else if(cha=='\'') { bracket3=!bracket3;continue;}
+        else if(cha=='|')  {bracket4=!bracket4;continue;}
+        if(bracket3||bracket4)continue;
+        if(bracket1>bracket2)break;
+        if(bracket1!=bracket2)continue;
+        if(cha==',')comnum++;
+        lett += cha;
+    }
+    if(lett.trim()==''&&comnum==-1) return -1;
+    return comnum;
+}
+function getInputParameter(snippet:string,md:string,startingnum:number):vscode.ParameterInformation[]{
+    if(snippet.split('(').length!=2 ||snippet.split(')').length!=2) return [];
+    let input= snippet.split('(')[1].split(')')[0].split(',').map((arg: string)=>arg.trim());
+    let result:vscode.ParameterInformation[]=[];
+    let nn = startingnum==-1?0:startingnum;
+    for(let i=nn;i<input.length;i++){
+        result.push(new vscode.ParameterInformation(input[i].replace(/\$\{\s*\d*\s*\:/gi,'').replace(/\}/gi,'').trim(),md));
+    }
+    return result;
+}
 // Document Symbol Provider
 class PmlDocumentSymbolProvider implements vscode.DocumentSymbolProvider {
     public provideDocumentSymbols(document: vscode.TextDocument, token: vscode.CancellationToken): Thenable<vscode.SymbolInformation[]> {
         return new Promise((resolve, reject) => {
             var symbols: any[] = [];
-
-            // This line is here purely to satisfy linter
             token = token;
             for (var i = 0; i < document.lineCount; i++) {
                 var line = document.lineAt(i);
@@ -64,7 +124,6 @@ function registerProviders(Context: vscode.ExtensionContext, knownVariables: any
     subscriptions.push(langs.registerCompletionItemProvider("pml", new GetObjectList(),'.' , ''));
     subscriptions.push(langs.registerCompletionItemProvider("pml", new Getlist()));
     subscriptions.push(langs.registerDocumentSymbolProvider("pml", new PmlDocumentSymbolProvider() ));
-    
 
 }
 class Getlist{
@@ -87,14 +146,10 @@ class GetObjectList{
         let methods: Array<vscode.CompletionItem> = [];
         methods = DocumentMethods(document,position,token,context);
         if ( methods.length!=0)return methods;
-        variables=parseKeys(position.line);
-        methods = GeneralMethods(document,position,token,context , variables);
-        if ( methods.length!=0)return methods;
-        methods = GeneralAttachedMethods(document,position,token,context,variables);
-        if ( methods.length!=0)return methods;
+        if(line!=position.line)
+            variables=parseKeys(position.line);
+        line = position.line;
         methods = GetMethod(document,position,token,context,variables);
-        if ( methods.length!=0)return methods;
-        methods = GetMethodInternal(document,position,token,context,variables);
         return methods;
     }
 }
@@ -165,42 +220,6 @@ function DocumentMethods(document: vscode.TextDocument, position: vscode.Positio
 }
 
 
-function GeneralAttachedMethods(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext,variables:varString[]) {
-
-    let Methods: Array<vscode.CompletionItem> = [];
-    let type:string = "";
-    var cont = document.lineAt(position.line).text;
-    let variableName = cont.substring(0,position.character - 1);
-    if (!cont.substring(0,position.character ).endsWith('.')) return Methods;
-    if(variableName.toLowerCase().endsWith(')')){
-        var temptype = methodtable.filter( methods => chkmethod(variableName, methods.name.trim().toLowerCase()));
-        if(temptype.length==0){
-            var tempt = variables.filter(methods => chkmethod(variableName.toLowerCase(), methods.name.trim().toLowerCase()));
-            if(tempt.length!=0)
-            type = tempt[0].type;
-        }
-        else
-            type = temptype[0].object;
-    }
-    else if(/!\w+$/g.test(variableName.toLowerCase().replace('this.',''))&&(!variableName.toLowerCase().replace('this','').endsWith('!')))
-        type =variables.filter( variable => variableName.toLowerCase().replace('this.','').endsWith('!' + variable.name.toLowerCase()))[0].type;
-    else
-        type = attributetable.filter( methods => chkatt(variableName.toLowerCase(), methods.name.trim().toLowerCase()))[0].object;
-    if (type=='') return Methods;
-    let filteredMethods = (dic as any).filter((methods: { library: string; }) => methods.library.toLowerCase() === type.toLowerCase());
-    Methods = (filteredMethods[0].methods).map((method: { label: string; snippet: string ; md: string ; }) => {
-        let chkmethod =  method.snippet?.includes('(');
-        let item = new vscode.CompletionItem(method.label, chkmethod?vscode.CompletionItemKind.Method:vscode.CompletionItemKind.Field);
-        if (method.snippet)
-            item.insertText = new vscode.SnippetString(method.snippet.split('(')[0]);
-        if (method.md)
-            item.documentation = getMarkDown(method);
-        return item;
-    });
-    return Methods;
-
-
-}
 function getMarkDown(method:{ label: string; snippet: string  ; md: string ; }):vscode.MarkdownString{
     let aa:vscode.MarkdownString = new vscode.MarkdownString();
     let chkmethod =  method.snippet?.includes('(');
@@ -216,168 +235,88 @@ function getMarkDown(method:{ label: string; snippet: string  ; md: string ; }):
 }
 
 function GetMethod(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext,variables:varString[]){
-    var cont = document.lineAt(position.line).text;
     let Methods: Array<vscode.CompletionItem> = [];
+    let methodset:{ Type:string;Methods:string[] } = GetMethodOutputType(document,position,token,context,variables,false);
+    let type = methodset.Type;
+    let methods:string[] = methodset.Methods;
+    let methodlist:string[] = [];
+    let tempMethods:Array<vscode.CompletionItem> = (dic.filter((lib: { library: string; })=>lib.library.toUpperCase()==type.toUpperCase())[0].methods)
+        .filter((met: { label: string; })=>met.label.toLowerCase().startsWith(methods[methods.length -1 ].toLowerCase()))
+        .map((method: { label: string; snippet: string ; md: string ; }) => {
+        let chkmethod =  method.snippet?.includes('(');
+        let item = new vscode.CompletionItem(method.label.split('(')[0], chkmethod?vscode.CompletionItemKind.Method:vscode.CompletionItemKind.Field);
+        if (method.snippet){
+            let methodName = method.snippet.split('(')[0];
+            item.insertText = new vscode.SnippetString(methodName);
+        }
+        if (method.md)
+            item.documentation = getMarkDown(method);
+            return item;
+    });
+    for(let k=0;k<tempMethods.length;k++){
+        if(methodlist.some(mm=>mm==tempMethods[k].label.toLowerCase()))
+            continue;
+            methodlist.push(tempMethods[k].label.toLowerCase());
+        Methods.push(tempMethods[k]);
+    }
+    return Methods;
+
+}
+function GetMethodOutputType(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext|undefined,variables:varString[],isInternalBracket:boolean):{ Type:string;Methods:string[] }{
+    var cont = document.lineAt(position.line).text.substring(0,position.character);
     let code = "";
     let type = '';
     let bracket1 = 0; // (
-    let bracket2 = 0; // )
+    let bracket2 = isInternalBracket?1:0; // )
     let bracket3 = false; // '
     let bracket4 = false; // |
     for( let i = 0; i<cont.length ;i++ )
     {
-        let strnum = cont.length - 1 - i;
-        let cha = cont.substring(strnum - 1,strnum);
-        if(cha=='(')  bracket1++;
-        if(cha==')')  bracket2++;
-        if(cha=='\'')  bracket3=!bracket3;
-        if(cha=='|')  bracket4=!bracket4;
+        let strnum = cont.length - i - 1;
+        let cha = cont.substring(strnum ,strnum+1);
+        if(cha=='(')  {bracket1++;continue;}
+        if(cha==')')  {bracket2++;continue;}
+        if(cha=='\'') { bracket3=!bracket3;continue;}
+        if(cha=='|')  {bracket4=!bracket4;continue;}
         if(bracket3||bracket4)continue;
         if(bracket1!=bracket2)continue;
-        if( cha=="!") break;
+        if( cha=="!"||cha==','||(bracket1>bracket2)) break;
         code = cha + code;
     }
     if (code.toLowerCase().replace('this.','')==''
-        ) return Methods;
+        ) type;
     let methods:string[] = code.toLowerCase().replace('this.','').split('.');
-    if (methods.length<2) return Methods;
+    if (methods.length<2) type;
     let initFilteredVar = variables.filter(varr=>varr.name.toLowerCase()==methods[0].toLowerCase());
     if(initFilteredVar.length>0)type=initFilteredVar[0].type;
 
-    for(let i=1;i<methods.length - 1;i++){
+    if(methods[0].toLowerCase()=='ce'){type = 'dbref';}
+    for(let i=1;i<methods.length-1;i++){
 
-        if(type!=''){
-            let getattlist = attributetable.filter(att=>att.name.toLowerCase()==methods[i].toLowerCase());
+            let getattlist = attributetable.filter(att=>att.name.toLowerCase()==methods[i].toLowerCase()&&att.from.toLowerCase()==type.toLowerCase());
             if(getattlist.length>0) {type = getattlist[0].object.toLowerCase();continue;}
-            let getmethodlist = methodtable.filter(met=>met.name.toLowerCase()==methods[i].toLowerCase())
+            let getmethodlist = methodtable.filter(met=>met.name.toLowerCase()==methods[i].toLowerCase()&&met.from.toLowerCase()==type.toLowerCase())
             if(getmethodlist.length>0) {type = getmethodlist[0].object.toLowerCase();continue;}
             let getlibrary = dic.filter((dd: { library: string; })=>dd.library.toLowerCase()==type.toLowerCase());
             if(getlibrary.length==0){type='';continue; }
             let getmethod = getlibrary[0].methods.filter((dd: { label: string;snippet: string;md: string; })=>dd.label.toLowerCase().startsWith(methods[i].toLowerCase().split('(')[0]));
             if(getmethod.length==0){type='';continue; }
-            let gettypes = objectlist.filter(object=>{
+            let gettypes = objectlist.filter((object): string=>{
                 return getmethod[0].snippet.toLocaleLowerCase().replace(/\s+/gi, '').endsWith(object.toLowerCase() + '}');
             });
             if(gettypes.length==0){type='';continue; }
             type = gettypes[0];
-        }
-        if(type==''){
-            
-        }
-
-
+        console.log('varible : ' + methods[i] + ', type is ' + type)
     }
+    let methodset:{ Type:string;Methods:string[] }={
+        Type: '',
+        Methods: []
+    };
+    methodset.Type = type;
+    methodset.Methods = methods;
 
-    Methods = (dic.filter((lib: { library: string; })=>lib.library.toLocaleLowerCase()==type)[0].methods).filter(met=>met.label.toLowerCase().startsWith(methods[methods.length -1 ].toLowerCase())).map((method: { label: string; snippet: string ; md: string ; }) => {
-        let chkmethod =  method.snippet?.includes('(');
-        let item = new vscode.CompletionItem(method.label, chkmethod?vscode.CompletionItemKind.Method:vscode.CompletionItemKind.Field);
-        if (method.snippet)
-            item.insertText = new vscode.SnippetString(method.snippet.split('(')[0]);
-        if (method.md)
-            item.documentation = getMarkDown(method);
-        return item;
-    });
-    return Methods;
-
+    return methodset;
 }
-function GetMethodInternal(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext,variables:varString[]){
-    var cont = document.lineAt(position.line).text;
-    let Methods: Array<vscode.CompletionItem> = [];
-    let code = "";
-    let type = '';
-    let bracket1 = 0; // (
-    let bracket2 = 1; // )
-    let bracket3 = false; // '
-    let bracket4 = false; // |
-    for( let i = 0; i<cont.length ;i++ )
-    {
-        let strnum = cont.length - 1 - i;
-        let cha = cont.substring(strnum - 1,strnum);
-        if(cha=='(')  bracket1++;
-        if(cha==')')  bracket2++;
-        if(cha=='\'')  bracket3=!bracket3;
-        if(cha=='|')  bracket4=!bracket4;
-        if(bracket3||bracket4)continue;
-        if(bracket1!=bracket2)continue;
-        if( cha=="!") break;
-        code = cha + code.replace(    );
-    }
-    if (code.toLowerCase().replace('this.','')==''
-        ) return Methods;
-    let methods:string[] = code.toLowerCase().replace('this.','').split('.');
-    if (methods.length<2) return Methods;
-    let initFilteredVar = variables.filter(varr=>varr.name.toLowerCase()==methods[0].toLowerCase());
-    if(initFilteredVar.length>0)type=initFilteredVar[0].type;
-
-    for(let i=1;i<methods.length - 1;i++){
-
-        if(type!=''){
-            let getattlist = attributetable.filter(att=>att.name.toLowerCase()==methods[i].toLowerCase());
-            if(getattlist.length>0) {type = getattlist[0].object.toLowerCase();continue;}
-            let getmethodlist = methodtable.filter(met=>met.name.toLowerCase()==methods[i].toLowerCase())
-            if(getmethodlist.length>0) {type = getmethodlist[0].object.toLowerCase();continue;}
-            let getlibrary = dic.filter((dd: { library: string; })=>dd.library.toLowerCase()==type.toLowerCase());
-            if(getlibrary.length==0){type='';continue; }
-            let getmethod = getlibrary[0].methods.filter((dd: { label: string;snippet: string;md: string; })=>dd.label.toLowerCase().startsWith(methods[i].toLowerCase().split('(')[0]));
-            if(getmethod.length==0){type='';continue; }
-            let gettypes = objectlist.filter(object=>{
-                return getmethod[0].snippet.toLocaleLowerCase().replace(/\s+/gi, '').endsWith(object.toLowerCase() + '}');
-            });
-            if(gettypes.length==0){type='';continue; }
-            type = gettypes[0];
-        }
-        if(type==''){
-            
-        }
-
-
-    }
-
-    Methods = (dic.filter((lib: { library: string; })=>lib.library.toLocaleLowerCase()==type)[0].methods).filter(met=>met.label.toLowerCase().startsWith(methods[methods.length -1 ].toLowerCase())).map((method: { label: string; snippet: string ; md: string ; }) => {
-        let chkmethod =  method.snippet?.includes('(');
-        let item = new vscode.CompletionItem(method.label, chkmethod?vscode.CompletionItemKind.Method:vscode.CompletionItemKind.Field);
-        if (method.snippet)
-            item.insertText = new vscode.SnippetString(method.snippet.split('(')[0]);
-        if (method.md)
-            item.documentation = getMarkDown(method);
-            item.
-
-        return item;
-    });
-    return Methods;
-
-}
-
-function GeneralMethods(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext ,variables:varString[]) {
-    var cont = document.lineAt(position.line).text;
-    let Methods: Array<vscode.CompletionItem> = [];
-    let variableName = "";
-    for( let i = 0; i<cont.length ;i++ )
-    {
-        let strnum = cont.length - 2 - i;
-        if( cont.substring(strnum,strnum+1)=="!") break;
-        variableName = cont.substring(strnum,strnum+1) + variableName;
-    }
-    if (variableName.toLowerCase().replace('this.','')
-        ||variableName.toLowerCase().replace('this.','')==''
-        ) return Methods;
-    else if (variableName.toLowerCase()==='this')return Methods;
-    let vatype = variables.filter( variable => variable.name.toLowerCase() === variableName.toLowerCase().replace('this.',''));
-    if(vatype.length==0) return Methods;
-    const filteredGeneralMethods = (dic as any).filter((methods: { library: string; }) => methods.library.toLowerCase() === vatype[0].type.toLowerCase());
-    if(filteredGeneralMethods.length==0) return Methods;
-    Methods = (filteredGeneralMethods[0].methods).map((method: { label: string; snippet: string ; md: string ; }) => {
-        let chkmethod =  method.snippet?.includes('(');
-        let item = new vscode.CompletionItem(method.label, chkmethod?vscode.CompletionItemKind.Method:vscode.CompletionItemKind.Field);
-        if (method.snippet)
-            item.insertText = new vscode.SnippetString(method.snippet.split('(')[0]);
-        if (method.md)
-            {item.documentation = getMarkDown(method);}
-        return item;
-    });
-    return Methods;
-}
-
 function contains(target:string, pattern: any[]){
     let value:boolean = false;
     pattern.forEach(function(word){
@@ -440,8 +379,9 @@ function GetVariable(variableName:string,variables:varString[]){
 
 
 function parseKeys(currentLineNo:number):varString[]{
-    if(objectlist==undefined)objectlist = (dic as any).map((dic: { library: any; })=>dic.library.toLowerCase());
     var variables :varString[] = [];
+    
+    if(objectlist==undefined)objectlist = (dic as any).map((dic: { library: any; })=>dic.library.toLowerCase());
     if (!vscode.window.activeTextEditor) return variables; // no editor
     let document:vscode.TextEditor = vscode.window.activeTextEditor;
     var varString: varString;
@@ -593,6 +533,9 @@ function GetType(line:string,variableName:string){
     '.pos',
     'pos',
     'pos.wrt(world)',
+    'pos.wrt(/*)',
+    'position.wrt(world)',
+    'position.wrt(/*)',
     'isposition',
     'startwrt/*',
     'endwrt/*',
