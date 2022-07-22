@@ -2,7 +2,7 @@
 	"name": "pmlvscodeextension",
 	"displayName": "pml-vscode-extension",
 	"description": "PML Language Highlighter and Snippets",
-	"version": "0.2.8",
+	"version": "0.3.0",
 	"publisher": "donghunlee",
 	"repository": {
 		"url": "https://github.com/Donghun1q2w/pml_vscode_extension"
