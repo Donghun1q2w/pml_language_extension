@@ -6,12 +6,14 @@ import methodtable from './methodtable.json'
 import attributetable from './attributetable.json'
 import dictionary from './dictionary.json'
 import dictionary_inhouse from './dictionary_inhouse.json'
+import * as functions from './functions'
 var dic:any = dictionary
 class varString{ name: string=""; type: string = ""; from: Number=0   ; to: Number| null=null; global: Boolean=false;}
 var variables:varString[]=[];
 var objectlist:string[];
 var line:number;
-let isForm = false; // False면 Object
+let FileType:{Form:boolean,Func:boolean,Object:boolean} ={Form:false,Func:false,Object:false}; // False면 Object
+let FileName = '';
 
 export function activate(Context: vscode.ExtensionContext) {
 
@@ -25,7 +27,18 @@ export function activate(Context: vscode.ExtensionContext) {
     Context.subscriptions.push(
         vscode.languages.registerSignatureHelpProvider(
             'pml', new PmlSignatureHelpProvider(),'(' ,','));
+}
+function registerCommands(Context: vscode.ExtensionContext) {
+    let subscriptions = Context.subscriptions;
+    let langs = vscode.languages;
+    subscriptions.push(Uglifier);
+}
 
+function registerProviders(Context: vscode.ExtensionContext, knownVariables: any) {
+    let subscriptions = Context.subscriptions;
+    let langs = vscode.languages;
+    subscriptions.push(langs.registerCompletionItemProvider("pml", new GetObjectList(),'.' , ''));
+    subscriptions.push(langs.registerDocumentSymbolProvider("pml", new PmlDocumentSymbolProvider() ));
 }
 class PmlSignatureHelpProvider implements vscode.SignatureHelpProvider {
     public provideSignatureHelp(
@@ -38,8 +51,8 @@ class PmlSignatureHelpProvider implements vscode.SignatureHelpProvider {
             // if(!isInnerBracket(document.lineAt(position.line).text.substring(0,position.character))){
             //     return resolve(a);
             // }
-            let bracketSet:number[] = GetPositionInterStringBracket(document.lineAt(position.line).text);
-            let ArgInfo = getCurrentStage(document.lineAt(position.line).text , position.character ,bracketSet);
+            let bracketSet:number[] = functions.GetPositionInterStringBracket(document.lineAt(position.line).text);
+            let ArgInfo = functions.getCurrentStage(document.lineAt(position.line).text , position.character ,bracketSet);
             return new Promise((resolve)=>{
                 let methodset:{ Type:string;Methods:string[] } = GetMethodOutputType(document,position,token,undefined,variables,true,bracketSet);
                 let methods = methodset.Methods;
@@ -51,7 +64,7 @@ class PmlSignatureHelpProvider implements vscode.SignatureHelpProvider {
 
                         .map((method: { label: string; snippet: string ; md: string ; }) => {
                         let item = new vscode.SignatureInformation(method.snippet.replace(/\$\{\s*\d*\s*\:/gi,'').replace(/\}/gi,''));
-                        item.parameters = getInputParameter(method.snippet , method.md , ArgInfo.CurrentArgumentStage-1);
+                        item.parameters = functions.getInputParameter(method.snippet , method.md , ArgInfo.CurrentArgumentStage-1);
                         item.parameters
                         return item;
                     });
@@ -60,65 +73,6 @@ class PmlSignatureHelpProvider implements vscode.SignatureHelpProvider {
             });
     }
 }
-function GetPositionInterStringBracket(currentLine:string):number[]{
-    let result:number[]=[];
-    let bracket3 = false; // '
-    let bracket4 = false; // |
-    for(let i=0;i<currentLine.length;i++){
-        let cha = currentLine.substring(i,i+1);
-        if(cha=='\'') { bracket3=!bracket3;result.push(i);continue;}
-        else if(cha=='|')  {bracket4=!bracket4;result.push(i);continue;}
-        if(bracket3||bracket4) result.push(i);
-    }
-    return result;
-}
-function getCurrentStage(line:string , curser:number , bracketSet:number[]):{ArgumentNum:number;isEmpty:boolean;CurrentArgumentStage:number}{
-
-    let resultFormat:{ArgumentNum:number;isEmpty:boolean;CurrentArgumentStage:number}={
-        ArgumentNum: 0,
-        isEmpty: false,
-        CurrentArgumentStage: 0
-    };
-    let bracket1 = 0; // (
-    let bracket2 = 0; // )
-    let ArgumentNumber = 0 ;
-    let lett = '';
-    let startNum = 0;
-    let afterArgNum = 0;
-    for(let j=curser;j<line.length;j++){
-        if(bracketSet.includes(j))continue;
-        let cha = line.substring(j,j+1);
-        startNum = j-1;
-        if(cha==')') break;
-        if(cha==',') afterArgNum++;
-    }
-    for(let i=startNum;i>=0;i--){
-        if(bracketSet.includes(i))continue;
-        let cha = line.substring(i,i+1);
-        if(cha=='(')  {bracket1++;continue;}
-        else if(cha==')')  {bracket2++;continue;}
-        if(bracket1>bracket2)break;
-        if(bracket1!=bracket2)continue;
-        if(cha==',') ArgumentNumber++;
-        lett += cha;
-    }
-    resultFormat.isEmpty=lett.trim()=='';
-    resultFormat.ArgumentNum=ArgumentNumber+1;
-    resultFormat.CurrentArgumentStage =resultFormat.ArgumentNum - afterArgNum;
-    
-    return resultFormat;
-}
-function getInputParameter(snippet:string,md:string,startingnum:number):vscode.ParameterInformation[]{
-    if(snippet.split('(').length!=2 ||snippet.split(')').length!=2) return [];
-    let input= snippet.split('(')[1].split(')')[0].split(',').map((arg: string)=>arg.trim());
-    let result:vscode.ParameterInformation[]=[];
-    let nn = startingnum==-1?0:startingnum;
-    for(let i=nn;i<input.length;i++){
-        result.push(new vscode.ParameterInformation(input[i].replace(/\$\{\s*\d*\s*\:/gi,'').replace(/\}/gi,'').trim(),md));
-    }
-    return result;
-}
-// Document Symbol Provider
 class PmlDocumentSymbolProvider implements vscode.DocumentSymbolProvider {
     public provideDocumentSymbols(document: vscode.TextDocument, token: vscode.CancellationToken): Thenable<vscode.SymbolInformation[]> {
         return new Promise((resolve, reject) => {
@@ -146,35 +100,14 @@ class PmlDocumentSymbolProvider implements vscode.DocumentSymbolProvider {
         });
     }
 }
-
-
-function registerProviders(Context: vscode.ExtensionContext, knownVariables: any) {
-    let subscriptions = Context.subscriptions;
-    let langs = vscode.languages;
-
-    subscriptions.push(langs.registerCompletionItemProvider("pml", new GetObjectList(),'.' , ''));
-    subscriptions.push(langs.registerCompletionItemProvider("pml", new Getlist()));
-    subscriptions.push(langs.registerDocumentSymbolProvider("pml", new PmlDocumentSymbolProvider() ));
-
-}
-class Getlist{
-    provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext) {
-        let methods: Array<vscode.CompletionItem> = [];
-        // methods.push(new vscode.CompletionItem('ehdgnsdl', vscode.CompletionItemKind.Method));
-        // methods[methods.length-1].insertText= new vscode.SnippetString('ehdgnsdlgmgma');
-        return methods;
-    }
-}
-
-function registerCommands(Context: vscode.ExtensionContext) {
-    let subscriptions = Context.subscriptions;
-    let langs = vscode.languages;
-
-    subscriptions.push(Uglifier);
-}
 class GetObjectList{
     provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext) {
         let methods: Array<vscode.CompletionItem> = [];
+        let file = functions.GetFileName(document.getText().split('\n'));
+        FileName = file.FileName;
+        FileType.Form=file.Form;
+        FileType.Func=file.Func;
+        FileType.Object=file.Object;
         methods = DocumentMethods(document,position,token,context);
         if ( methods.length!=0)return methods;
         if(line!=position.line)
@@ -186,14 +119,12 @@ class GetObjectList{
 }
 function DocumentMethods(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext) {
     let methods: Array<vscode.CompletionItem> = [];
-    let filename = document.fileName;
-    let aa = document.lineAt(position.line).text.toLowerCase().substring(0,position.character - 1);
     if (!/!this.[a-z0-9]*$/gi.test(document.lineAt(position.line).text))
         return methods;
     var lines = document.getText().split('\n');
 
     for (var i = 0; i < lines.length; i++) {
-        if(!/^\s*define\s*method\s*\.[a-z][a-z0-9]*/gi.test(lines[i])&&!/^\s*member\s*\.[a-z][a-z0-9]*\s*is\s*/gi.test(lines[i])&&GettingGadget(lines[i]).gadget=='') continue;
+        if(!/^\s*define\s*method\s*\.[a-z][a-z0-9]*/gi.test(lines[i])&&!/^\s*member\s*\.[a-z][a-z0-9]*\s*is\s*/gi.test(lines[i])&&functions.GettingGadget(lines[i]).gadget=='') continue;
         let orilineTrimmed:string = lines[i].trim().replace( /\s+/g , ' ').replace( '\r' ,'');
         let lineTrimmed:string = orilineTrimmed;
         let desc:string = '';
@@ -209,8 +140,11 @@ function DocumentMethods(document: vscode.TextDocument, position: vscode.Positio
             methods[methods.length-1].insertText= new vscode.SnippetString(methodname);
             if( desc==''){
                 for(let p=1;p<20;p++){
-                    if(!/^\s*description/gi.test(lines[i-p].replace('--','').replace('|',''))||!/\s*--/g) continue;
-                    desc = lines[i-p].split(':')[1].trim();
+                    if(!/^\s*--\s*description/gi.test(lines[i-p])) continue;
+                    try{
+                        desc = lines[i-p].split(':')[1].trim();
+                    }
+                    catch{}
                     for(let t=1;t<5;t++){
                         if(!/\s*--/g.test(lines[i-p+t]))continue;
                         else if(/-------/g.test(lines[i-p+t]))break;
@@ -218,81 +152,46 @@ function DocumentMethods(document: vscode.TextDocument, position: vscode.Positio
                     }
                 }
             }
-            methods[methods.length-1].documentation = SetMarkdown('(method) ' + attName ,desc);
+            methods[methods.length-1].documentation = functions.SetMarkdown('(method) ' + attName ,desc);
         }
         else if (/^\s*member\s*\.[a-z][a-z0-9]*\s*is\s*/gi.test(lines[i])){
             let attName:string = lineTrimmed.split( '.')[1].split( ' ')[0].trim();
             let output:string =lineTrimmed.split( '.')[1].split( ' ')[2].split('$')[0].trim();
             methods.push(new vscode.CompletionItem(attName, vscode.CompletionItemKind.Field));
             methods[methods.length-1].insertText= new vscode.SnippetString(attName.split('(')[0]);
-            methods[methods.length-1].documentation = SetMarkdown('(member) ' + attName + ' : ' + output,desc);
+            methods[methods.length-1].documentation = functions.SetMarkdown('(member) ' + attName + ' : ' + output,desc);
         }
-        else if(GettingGadget(lines[i]).gadget!=''){
+        else if(functions.GettingGadget(lines[i]).gadget!=''){
             let gadgetName = /\.[a-z][a-z0-9]*/gi.exec(lines[i]);
             if(gadgetName==null)continue;
             methods.push(new vscode.CompletionItem(gadgetName[0].substring(1),vscode.CompletionItemKind.Property))
             methods[methods.length-1].insertText= new vscode.SnippetString(gadgetName[0].substring(1));
-            methods[methods.length-1].documentation = SetMarkdown('(gadget ) ' + gadgetName[0].substring(1) ,GettingGadget(lines[i]).formalName);
+            methods[methods.length-1].documentation = functions.SetMarkdown('(gadget ) ' + gadgetName[0].substring(1) ,functions.GettingGadget(lines[i]).formalName);
+        }
+    }
+    if(FileType.Form){
+        let mets = dic.filter((lib: { library: string; })=>/^form$/gi.test(lib.library))[0].methods;
+        for(let i=0;i<mets.length;i++){
+            let met = mets[i];
+            let metname = /^[a-z0-9]*/gi.exec(met.label);
+             if(metname!=null ){
+                methods.push(new vscode.CompletionItem(metname[0],/\(/gi.test(met.label)?vscode.CompletionItemKind.Method:vscode.CompletionItemKind.Field));
+                methods[methods.length-1].insertText = met.snippet;
+                let nam = /\(/gi.test(met.label)?'member':'attribute';
+                methods[methods.length-1].documentation = functions.SetMarkdown('( Form '+nam+') ' + met.label,met.md);
+            }
         }
     }
     return methods;
 }
-function GettingGadget(line:string):{gadget:string,formalName:string}{
-    let gadgetList:{gadget:string,formalName:string}[]=[
-        {gadget: 'button',formalName: 'button'},
-        {gadget: 'para',formalName: 'paragraph'},
-        {gadget: 'paragraph',formalName: 'paragraph'},
-        {gadget: 'frame',formalName: 'frame'},
-        {gadget: 'text',formalName: 'text'},
-        {gadget: 'rtoggle',formalName: 'rtoggle'},
-        {gadget: 'toggle',formalName: 'toggle'},
-        {gadget: 'textpane',formalName: 'textpane'},
-        {gadget: 'bar',formalName: 'bar'},
-        {gadget: 'combobox',formalName: 'combobox'},
-        {gadget: 'lsit',formalName: 'list'},
-        {gadget: 'view',formalName: 'view'},
-        {gadget: 'slider',formalName: 'slider'},
-        {gadget: 'option',formalName: 'option'},
-        {gadget: 'container',formalName: 'container'},
-        {gadget: 'selector',formalName: 'selector'},
-        {gadget: 'line',formalName: 'line gadget'}
-    ];
-    for(let i=0;i<gadgetList.length;i++){
-        let regex = new RegExp('\^\\s*'+gadgetList[i].gadget+'\\s*.[a-z][a-z0-9]\*','gi');
-        if(new RegExp('\^\\s*'+gadgetList[i].gadget+'\\s*.[a-z][a-z0-9]\*','gi').test(line)){
-            return gadgetList[i];
-        }
-    }
-    let emptyresult:{gadget:string,formalName:string}={gadget:'',formalName:''};
-    return emptyresult;
-}
-function SetMarkdown(name:string,desc:string):vscode.MarkdownString{
-    let markdown:vscode.MarkdownString = new vscode.MarkdownString();
-    markdown.appendMarkdown(name);
-    markdown.appendMarkdown('\n');
-    markdown.appendMarkdown('\n---\n');
-    markdown.appendMarkdown(desc);
-    return markdown;
-}
 
 
-function getMarkDown(method:{ label: string; snippet: string  ; md: string ; }):vscode.MarkdownString{
-    let aa:vscode.MarkdownString = new vscode.MarkdownString();
-    let chkmethod =  method.snippet?.includes('(');
-    let sn:any = method.snippet.replace(/\$\{\d\:/gi , '').replace(/\}/gi,'').replace( /\)is\s*/gi ,') :');
-    let pref = chkmethod?'(method) ':'(attribute) ';
-    aa.appendMarkdown(pref + sn);
-    aa.appendMarkdown("\n");
-    aa.appendMarkdown("\n---\n");
-    aa.appendMarkdown(method.md);
-    aa.isTrusted = true;
-    return aa;
-    // item.documentation.appendMarkdown('<span style="color:#1EA4FF;background-color:#757575;">**'+method.snippet+'**</span> ');
-}
+
+
 
 function GetMethod(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext,variables:varString[]){
     let Methods: Array<vscode.CompletionItem> = [];
-    let methodset:{ Type:string;Methods:string[] } = GetMethodOutputType(document,position,token,context,variables,false,GetPositionInterStringBracket(document.lineAt(position.line).text));
+    let methodset:{ Type:string;Methods:string[] } = GetMethodOutputType(document,position,token,context,variables,false,functions.GetPositionInterStringBracket(document.lineAt(position.line).text));
     let type = methodset.Type;
     let methods:string[] = methodset.Methods;
     let methodlist:string[] = [];
@@ -306,7 +205,7 @@ function GetMethod(document: vscode.TextDocument, position: vscode.Position, tok
             item.insertText = new vscode.SnippetString(methodName);
         }
         if (method.md)
-            item.documentation = getMarkDown(method);
+            item.documentation = functions.getMarkDown(method);
             return item;
     });
     for(let k=0;k<tempMethods.length;k++){
@@ -315,6 +214,9 @@ function GetMethod(document: vscode.TextDocument, position: vscode.Position, tok
             methodlist.push(tempMethods[k].label.toLowerCase());
         Methods.push(tempMethods[k]);
     }
+        Methods.push(new vscode.CompletionItem('Unset',vscode.CompletionItemKind.Method))
+        Methods[Methods.length-1].insertText = new vscode.SnippetString('Unset')
+        Methods[Methods.length-1].documentation = functions.SetMarkdown('(method ) Unset(): boolean', 'check is unset');
     return Methods;
 
 }
@@ -338,7 +240,7 @@ function GetMethodOutputType(document: vscode.TextDocument, position: vscode.Pos
     if (code.toLowerCase().replace('this.','')==''
         ) type;
     let methods:string[] = code.toLowerCase().replace('this.','').split('.');
-    if (methods.length<2) type;
+        if (methods.length<2) type;
     let initFilteredVar = variables.filter(varr=>varr.name.toLowerCase()==methods[0].toLowerCase());
     if(initFilteredVar.length>0)type=initFilteredVar[0].type;
 
@@ -369,56 +271,6 @@ function GetMethodOutputType(document: vscode.TextDocument, position: vscode.Pos
 
     return methodset;
 }
-function contains(target:string, pattern: any[]){
-    let value:boolean = false;
-    pattern.forEach(function(word){
-        if(target.toLowerCase().includes(word.toLowerCase()))
-            value = true;
-        else
-            value = value;
-        if (value==true) return;
-    });
-    return value;
-}
-function starts(target:string, pattern: any[]){
-    let value:boolean = false;
-    pattern.forEach(function(word){
-        if( new RegExp("\^\\s*" + word , 'gi').test(target))
-            value = true;
-        else
-            value = value;
-        if (value==true) return;
-    });
-    return value;
-}
-function HasMember(line:string, ObjectList: string | any[]){
-    let result:string = '';
-    for( let i = 0; i<ObjectList.length;i++)
-    {
-        if(line.endsWith( 'is' + ObjectList[i]))
-        return ObjectList[i];
-    }
-    return result;
-}
-function GetObject(line:string , variableName:string, ObjectList: string | any[]){
-    let result:string = '';
-    for( let i = 0; i<ObjectList.length;i++)
-    {
-        if(line.includes( '!' + variableName + 'is'+ObjectList[i])
-        ||line.startsWith( '!' + variableName + '='+ObjectList[i])
-        ||line.startsWith( '!' + variableName + '=object'+ObjectList[i]+'('))return ObjectList[i];
-    }
-    return result;
-}
-function HasVarialbe(line:string, variable:string , ObjectList: string | any[]){
-    let result:string = '';
-    for( let i = 0; i<ObjectList.length;i++)
-    {
-        if(line.startsWith('!'+variable+'=')&&line.endsWith(ObjectList[i]))return ObjectList[i];
-        else if(line.startsWith('!!'+variable+'=')&&line.endsWith(ObjectList[i]))return ObjectList[i];
-    }
-    return result;
-}
 function GetVariable(variableName:string,variables:varString[]){
     let result :varString = new varString;
     for( let i=0;i<variables.length;i++){
@@ -445,7 +297,7 @@ function parseKeys(currentLineNo:number):varString[]{
     //getMember of form or object
     for(let l in lines){
         let line = lines[l];
-        if( !/^\s*member\s*\.[a-z][a-z0-9]*/gi.test(line)) continue;
+        if( !/^\s*member\s*\.[a-z][a-z0-9]*/gi.test(line)&&functions.GettingGadget(line).gadget=='') continue;
         else if( /^\s*define\s*method\s*./gi.test(line)) break;
         
 
@@ -457,12 +309,20 @@ function parseKeys(currentLineNo:number):varString[]{
         type = '';
         variableName = '';
         
-        let vs = /member\s*\.[a-z][a-z0-9]*/gi.exec(lineContent); if(vs==null) continue;
-        variableName = vs[0].replace( /member\s*\./gi ,'');
-        type = lineContent.replace(new RegExp("\\s*member\\s*\\." + variableName + "\\s*is\\s*",'gi')  , '').trim().toLowerCase();
-        if(objectlist.some((objectname: string)=>objectname==type.toLowerCase() ))
-        {
-            variables = AssignVar( variableName ,type , 0 , 1000 ,true, variables);
+        let vs = /member\s*\.[a-z][a-z0-9]*/gi.exec(lineContent); 
+        if(vs!=null){
+            variableName = vs[0].replace( /member\s*\./gi ,'');
+            type = lineContent.replace(new RegExp("\\s*member\\s*\\." + variableName + "\\s*is\\s*",'gi')  , '').trim().toLowerCase();
+            if(objectlist.some((objectname: string)=>objectname==type.toLowerCase() ))
+            {
+                variables = AssignVar( variableName ,type , 0 , 1000 ,true, variables);
+            }
+        }
+        else if(functions.GettingGadget(line).gadget!=''){
+            let gadgetName = /\.[a-z][a-z0-9]*/gi.exec(line);
+            if(gadgetName!=null){
+                variables = AssignVar( gadgetName[0].substring(1) ,functions.GettingGadget(line).formalName , 0 , 1000 ,true, variables);
+            }
         }
     }
     var chk = false;
@@ -498,7 +358,7 @@ function parseKeys(currentLineNo:number):varString[]{
     //in method to upper
     for(let i=currentLineNo ;i>=0;i--){
         if(/^\s*define\s*method\s*.[a-z]*/gi.test(lines[i])||/^\s*endmethod\s*/gi.test(lines[i])) break;
-        if(starts(lines[i] , fil) || /^[\s]*$/gi.test(lines[i])) continue;
+        if(functions.starts(lines[i] , fil) || /^[\s]*$/gi.test(lines[i])) continue;
         var lineContent = lines[i];
         console.log(lineContent);
         let vs = /[!]+[a-z][a-z0-9]*/gi.exec(lineContent);
@@ -519,7 +379,11 @@ function GetType(line:string,variableName:string){
     let lineContent = line.replace( /\s*/gi , '').toLowerCase();
     var ArrayRegex = new RegExp("!" +variableName + "\\[\\$*!*\\w*\\d*\\]", 'g');
     var RealRegex = new RegExp("!" + variableName + "\\s*=\\s*\\d+$", 'g');
-    type = GetObject(lineContent,variableName,objectlist);
+    let gadgetSet = functions.GettingGadget(line);
+    if(gadgetSet.gadget!='')type = gadgetSet.formalName;
+    if( type != '')
+     return type;
+    type = functions.GetObject(lineContent,variableName,objectlist);
 
     if( type != '')
      return type;
@@ -542,7 +406,7 @@ function GetType(line:string,variableName:string){
         type = "boolean";
     }
     else if (lineContent.includes(variableName + "='")
-    || contains(lineContent , [variableName + "=|"
+    || functions.contains(lineContent , [variableName + "=|"
     , variableName + "=string",
     variableName + "=nam",
     variableName + "=desc",
@@ -580,7 +444,7 @@ function GetType(line:string,variableName:string){
     else if ((lineContent.startsWith('!' + variableName + '=')&&lineContent.endsWith(".position"))
     || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="position"&&chkmethod(lineContent,method.name)))
     || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="position"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
-    ||HasVarialbe(lineContent,variableName,['.pos.wrt(world)',
+    ||functions.HasVarialbe(lineContent,variableName,['.pos.wrt(world)',
     '.pos',
     'pos',
     'pos.wrt(world)',
@@ -602,7 +466,7 @@ function GetType(line:string,variableName:string){
     || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="dbref"&&chkmethod(lineContent,method.name)))
     || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="dbref"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
     || (lineContent.startsWith('!' + variableName + '=')&&lineContent.endsWith("!!ce"))
-    || contains( lineContent, [variableName + "=own",
+    || functions.contains( lineContent, [variableName + "=own",
     variableName + "=pre",
     variableName + "=site",
     variableName + "=zone",
