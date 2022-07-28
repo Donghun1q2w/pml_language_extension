@@ -45,7 +45,7 @@ class PmlSignatureHelpProvider implements vscode.SignatureHelpProvider {
         document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken):
         Thenable<vscode.SignatureHelp> {
             if(line!=position.line)
-                variables=parseKeys(position.line);
+                variables=get_AllVariables(position.line);
             line = position.line;
             let a = new vscode.SignatureHelp();
             // if(!isInnerBracket(document.lineAt(position.line).text.substring(0,position.character))){
@@ -108,18 +108,18 @@ class GetObjectList{
         FileType.Form=file.Form;
         FileType.Func=file.Func;
         FileType.Object=file.Object;
-        methods = DocumentMethods(document,position,token,context);
+        methods = Get_Attributes_Methods_of_Document(document,position,token,context);
         if ( methods.length!=0)return methods;
         if(line!=position.line)
-            variables=parseKeys(position.line);
+            variables=get_AllVariables(position.line);
         line = position.line;
-        methods = GetMethod(document,position,token,context,variables);
+        methods = Get_Method_of_All_Variables(document,position,token,context,variables);
         return methods;
     }
 }
-function DocumentMethods(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext) {
+function Get_Attributes_Methods_of_Document(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext) {
     let methods: Array<vscode.CompletionItem> = [];
-    if (!/!this.[a-z0-9]*$/gi.test(document.lineAt(position.line).text))
+    if (!functions.contains( functions.Get_First_Variable_Name(document.lineAt(position.line).text.substring(0,position.character)),['this' , FileName]))
         return methods;
     var lines = document.getText().split('\n');
 
@@ -189,7 +189,7 @@ function DocumentMethods(document: vscode.TextDocument, position: vscode.Positio
 
 
 
-function GetMethod(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext,variables:varString[]){
+function Get_Method_of_All_Variables(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext,variables:varString[]){
     let Methods: Array<vscode.CompletionItem> = [];
     let methodset:{ Type:string;Methods:string[] } = GetMethodOutputType(document,position,token,context,variables,false,functions.GetPositionInterStringBracket(document.lineAt(position.line).text));
     let type = methodset.Type;
@@ -247,19 +247,22 @@ function GetMethodOutputType(document: vscode.TextDocument, position: vscode.Pos
     if(methods[0].toLowerCase()=='ce'){type = 'dbref';}
     for(let i=1;i<methods.length-1;i++){
 
-            let getattlist = attributetable.filter(att=>att.name.toLowerCase()==methods[i].toLowerCase()&&att.from.toLowerCase()==type.toLowerCase());
-            if(getattlist.length>0) {type = getattlist[0].object.toLowerCase();continue;}
-            let getmethodlist = methodtable.filter(met=>met.name.toLowerCase()==methods[i].toLowerCase()&&met.from.toLowerCase()==type.toLowerCase())
-            if(getmethodlist.length>0) {type = getmethodlist[0].object.toLowerCase();continue;}
-            let getlibrary = dic.filter((dd: { library: string; })=>dd.library.toLowerCase()==type.toLowerCase());
-            if(getlibrary.length==0){type='';continue; }
-            let getmethod = getlibrary[0].methods.filter((dd: { label: string;snippet: string;md: string; })=>dd.label.toLowerCase().startsWith(methods[i].toLowerCase().split('(')[0]));
-            if(getmethod.length==0){type='';continue; }
-            let gettypes = objectlist.filter(object=>{
-                return getmethod[0].snippet.toLocaleLowerCase().replace(/\s+/gi, '').endsWith(object.toLowerCase() + '}');
-            });
-            if(gettypes.length==0){type='';continue; }
-            type = gettypes[0];
+        if(methods[i].toLowerCase()=='unset'){ type = 'boolean';continue;}
+        let Atrribute_List = attributetable.filter(att=>att.name.toLowerCase()==methods[i].toLowerCase()&&att.from.toLowerCase()==type.toLowerCase());
+        if(Atrribute_List.length==1) {type = Atrribute_List[0].object.toLowerCase();continue;}
+
+        let Method_List = methodtable.filter(met=>met.name.toLowerCase()==methods[i].toLowerCase()&&met.from.toLowerCase()==type.toLowerCase())
+        if(Method_List.length==1) {type = Method_List[0].object.toLowerCase();continue;}
+
+        let Object_List = dic.filter((dd: { library: string; })=>dd.library.toLowerCase()==type.toLowerCase());
+        if(Object_List.length==0){type='';continue; }
+        let getmethod = Object_List[0].methods.filter((dd: { label: string;snippet: string;md: string; })=>dd.label.toLowerCase().startsWith(methods[i].toLowerCase().split('(')[0]));
+        if(getmethod.length==0){type='';continue; }
+        let gettypes = objectlist.filter(object=>{
+            return getmethod[0].snippet.toLocaleLowerCase().replace(/\s+/gi, '').endsWith(object.toLowerCase() + '}');
+        });
+        if(gettypes.length==0){type='';continue; }
+        type = gettypes[0];
         console.log('varible : ' + methods[i] + ', type is ' + type)
     }
     let methodset:{ Type:string;Methods:string[] }={
@@ -271,17 +274,9 @@ function GetMethodOutputType(document: vscode.TextDocument, position: vscode.Pos
 
     return methodset;
 }
-function GetVariable(variableName:string,variables:varString[]){
-    let result :varString = new varString;
-    for( let i=0;i<variables.length;i++){
-        if(variableName==variables[i].name) return variables[i];
-    }
-    return result;
-}
 
 
-
-function parseKeys(currentLineNo:number):varString[]{
+function get_AllVariables(currentLineNo:number):varString[]{
     var variables :varString[] = [];
     
     if(objectlist==undefined)objectlist = (dic as any).map((dic: { library: any; })=>dic.library.toLowerCase());
@@ -325,15 +320,13 @@ function parseKeys(currentLineNo:number):varString[]{
             }
         }
     }
-    var chk = false;
     //getMember of form or object
-    var getmethod = lines.filter(line=>/^\s*define\s*method\s*\.[a-z][a-z0-9]*\s*\(/gi.test(line)).map(ll=>{
+    var get_Form_and_Object_Methods = lines.filter(line=>/^\s*define\s*method\s*\.[a-z][a-z0-9]*\s*\(/gi.test(line)).map(ll=>{
         return ll.replace( /\\r/gi ,'').replace(/\s+/gi , ' ').replace(/\$\*[a-z 0-9.!@#$%^&*()_\-,<>/{}\\|";'?`~.+=]*/gi,'').trim();
     });
-    var chk = true;
-    for(let i=0;i<getmethod.length;i++){
-        var input = getmethod[i].split('(')[1].split(')')[0];
-        var output = getmethod[i].split(')')[1];
+    for(let i=0;i<get_Form_and_Object_Methods.length;i++){
+        var input = get_Form_and_Object_Methods[i].split('(')[1].split(')')[0];
+        var output = get_Form_and_Object_Methods[i].split(')')[1];
         if(input.trim()!=''){
             var inputList = input.split(',');
             for(let l=0;l<inputList.length;l++){
@@ -347,8 +340,8 @@ function parseKeys(currentLineNo:number):varString[]{
         if(output!='')
         {
             type = '';
-            var variable = getmethod[i].replace( /^\s*define\s*method\s*./gi , '').split('(')[0];
-            type =  getmethod[i].split(')')[1].trim().split(' ')[1].toLowerCase();
+            var variable = get_Form_and_Object_Methods[i].replace( /^\s*define\s*method\s*./gi , '').split('(')[0];
+            type =  get_Form_and_Object_Methods[i].split(')')[1].trim().split(' ')[1].toLowerCase();
             if( type!=''){
                 variables = AssignVar( variable ,type , 0 , 1000 ,true, variables);
             }
@@ -382,7 +375,7 @@ function GetType(line:string,variableName:string){
     let gadgetSet = functions.GettingGadget(line);
     if(gadgetSet.gadget!='')type = gadgetSet.formalName;
     if( type != '')
-     return type;
+        return type;
     type = functions.GetObject(lineContent,variableName,objectlist);
 
     if( type != '')
@@ -391,15 +384,20 @@ function GetType(line:string,variableName:string){
     || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="array"&&chkmethod(lineContent,method.name)))
     || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="array"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
     || ArrayRegex.exec(lineContent)
-    || lineContent.includes('var!' + variableName + 'coll')
-    || lineContent.includes('var!' + variableName + 'eval')
-    ) {
+    || functions.starts(line.replace(/\s+/g,' '), ['var !' + variableName + ' coll'
+           ,'var !' + variableName + ' eval'
+           ,'var !' + variableName + ' split'])
+    ||lineContent.endsWith(variableName + "=desp")
+     || lineContent.endsWith( variableName + "=para")
+    ){
         type = "array";
     }
     else if (lineContent.includes('!' + variableName + '=true')
     || lineContent.includes('!' + variableName + '=false')
     || lineContent.includes('!' + variableName + '=T')
     || lineContent.includes('!' + variableName + '=F')
+    || lineContent.includes('!' + variableName + '=undefined(')
+    || lineContent.includes('!' + variableName + '=defined(')
     || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="boolean"&&chkmethod(lineContent,method.name)))
     || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="boolean"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
     ) {
@@ -409,6 +407,7 @@ function GetType(line:string,variableName:string){
     || functions.contains(lineContent , [variableName + "=|"
     , variableName + "=string",
     variableName + "=nam",
+    variableName + "='",
     variableName + "=desc",
     variableName + "=purp",
     variableName + "=func",
@@ -421,7 +420,7 @@ function GetType(line:string,variableName:string){
     variableName + "=fprop"])
     || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="string"&&chkmethod(lineContent,method.name)))
     || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="string"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
-    || lineContent.includes('var!' + variableName)
+    || line.replace(/\s+/g,' ').includes('var !' + variableName + ' ')
     ) {
         type = "string";
     }
@@ -432,6 +431,22 @@ function GetType(line:string,variableName:string){
     ||lineContent.includes('!' + variableName + 'real')
     || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="real"&&chkmethod(lineContent,method.name)))
     || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="real"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
+    || functions.contains(lineContent , [variableName + "=abs"
+    , variableName + "=tan",
+    variableName + "=atan",
+    variableName + "=sin",
+    variableName + "=asin",
+    variableName + "=log",
+    variableName + "=alog",
+    variableName + "=modulo",
+    variableName + "=acos",
+    'do!'+variableName + "to",
+    'do!'+variableName + "from",
+    variableName + "=cos",
+    variableName + "=max",
+    variableName + "=min",
+    variableName + "=pow",
+    variableName + "=sqrt"])
     ) {
         type = "real";
     }

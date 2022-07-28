@@ -55,6 +55,32 @@ function HasVarialbe(line:string, variable:string , ObjectList: string | any[]){
 	return result;
 }
 
+function Get_First_Variable_Name(line:string):string{
+	
+	let result = '';
+	let bracket1 = 0; // (
+	let bracket2 = 0; // )
+	let bracket3 = false; // '
+	let bracket4 = false; // |
+	let bracket5 = 0; // <
+	let bracket6 = 0; // >
+	for(let i = line.length -1 ; i >=0; i--){
+		let cha = line.substring(i,i+1);
+		if(cha =="'"){bracket3=!bracket4;continue;}
+		else if(bracket3!=bracket4)continue;
+		else if(cha=='('){bracket1++;continue;}
+		else if(cha==')'){bracket2++;continue;}
+		else if(cha=='<'){bracket5++;continue;}
+		else if(cha=='>'){bracket6++;continue;}
+		else if(bracket1!=bracket2)continue;
+		else if(bracket5!=bracket6)continue;
+		else if(cha=='.'){result = '';continue;}
+		else if(contains(cha,['!',','])){break;}
+		result = cha + result;
+	}
+	return result;
+}
+
 function GetPositionInterStringBracket(currentLine:string):number[]{
     let result:number[]=[];
     let bracket3 = false; // '
@@ -187,4 +213,4 @@ function GetFileName(lines:string[]):{FileName:string,Form:boolean,Func:boolean,
 		}
 		return resultFormat;
 		}
-export{contains,starts,HasMember,GetObject,HasVarialbe,GetPositionInterStringBracket,getMarkDown,getCurrentStage,getInputParameter,GettingGadget,SetMarkdown,GetFileName}
+export{contains,starts,HasMember,GetObject,Get_First_Variable_Name,HasVarialbe,GetPositionInterStringBracket,getMarkDown,getCurrentStage,getInputParameter,GettingGadget,SetMarkdown,GetFileName}
