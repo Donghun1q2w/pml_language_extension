@@ -56,12 +56,12 @@ class PmlSignatureHelpProvider implements vscode.SignatureHelpProvider {
             return new Promise((resolve)=>{
                 let methodset:{ Type:string;Methods:string[] } = GetMethodOutputType(document,position,token,undefined,variables,true,bracketSet);
                 let methods = methodset.Methods;
+                // if(functions.Get_First_Variable_Name(document.lineAt(position.line).text.substring(0,position.character))){}
                 let tempMethods:Array<vscode.SignatureInformation> = (dic.filter((lib: { library: string; })=>lib.library.toUpperCase()==methodset.Type.toUpperCase())[0].methods)
                         .filter((met: { label: string; })=>met.label.split('(')[0].toLowerCase()==methods[methods.length -1 ].toLowerCase()
                         &&(met.label.split(',').length>=ArgInfo.ArgumentNum+1//input 갯수가 2개 이상인 method
                             ||(ArgInfo.isEmpty&&met.label.split(',').length==ArgInfo.ArgumentNum) //인풋 입력란이 비었을 때, 모든 method
                             ||(!ArgInfo.isEmpty&&!/\(\s*\)/gi.test(met.label)&&met.label.split(',').length>=ArgInfo.ArgumentNum))) // 인풋 입력란이 작성되었을 때, 변수가 1개 이상인 method
-
                         .map((method: { label: string; snippet: string ; md: string ; }) => {
                         let item = new vscode.SignatureInformation(method.snippet.replace(/\$\{\s*\d*\s*\:/gi,'').replace(/\}/gi,''));
                         item.parameters = functions.getInputParameter(method.snippet , method.md , ArgInfo.CurrentArgumentStage-1);
@@ -122,7 +122,6 @@ function Get_Attributes_Methods_of_Document(document: vscode.TextDocument, posit
     if (!functions.contains( functions.Get_First_Variable_Name(document.lineAt(position.line).text.substring(0,position.character)),['this' , FileName]))
         return methods;
     var lines = document.getText().split('\n');
-
     for (var i = 0; i < lines.length; i++) {
         if(!/^\s*define\s*method\s*\.[a-z][a-z0-9]*/gi.test(lines[i])&&!/^\s*member\s*\.[a-z][a-z0-9]*\s*is\s*/gi.test(lines[i])&&functions.GettingGadget(lines[i]).gadget=='') continue;
         let orilineTrimmed:string = lines[i].trim().replace( /\s+/g , ' ').replace( '\r' ,'');
@@ -237,8 +236,7 @@ function GetMethodOutputType(document: vscode.TextDocument, position: vscode.Pos
         if( cha=="!"||cha==','||(bracket1>bracket2)) break;
         code = cha + code;
     }
-    if (code.toLowerCase().replace('this.','')==''
-        ) type;
+    if (code.toLowerCase().replace('this.','')=='') type = FileType.Form ? 'form':'object';
     let methods:string[] = code.toLowerCase().replace('this.','').split('.');
         if (methods.length<2) type;
     let initFilteredVar = variables.filter(varr=>varr.name.toLowerCase()==methods[0].toLowerCase());
