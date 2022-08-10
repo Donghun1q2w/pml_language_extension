@@ -194,9 +194,9 @@ function GetFileName(lines:string[]):{FileName:string,Form:boolean,Func:boolean,
 	let resultFormat:{FileName:string,Form:boolean,Func:boolean,Object:boolean}={FileName:'',Form:false,Func:false,Object:false};
 		for(let i=0;i<lines.length;i++){
 			let line = lines[i];
-			let chkForm = /^\s*setup\s*form\s*!![a-z][a-z0-9]/gi.exec(line);
-			let chkFunc = /^\s*define\s*function\s*!![a-z][a-z0-9]/gi.exec(line);
-			let chkObj = /^\s*define\s*object\s*[a-z][a-z0-9]/gi.exec(line);
+			let chkForm = /^\s*setup\s*form\s*!![a-z][a-z0-9]*/gi.exec(line);
+			let chkFunc = /^\s*define\s*function\s*!![a-z][a-z0-9]*/gi.exec(line);
+			let chkObj = /^\s*define\s*object\s*[a-z][a-z0-9]*/gi.exec(line);
 			if(chkForm!=null){
 				resultFormat.FileName = chkForm[0].replace(/^\s*setup\s*form\s*!!/gi,'');
 				resultFormat.Form=true;

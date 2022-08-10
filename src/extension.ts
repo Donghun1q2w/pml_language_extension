@@ -119,7 +119,9 @@ class GetObjectList{
 }
 function Get_Attributes_Methods_of_Document(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext) {
     let methods: Array<vscode.CompletionItem> = [];
-    if (!functions.contains( functions.Get_First_Variable_Name(document.lineAt(position.line).text.substring(0,position.character)),['this' , FileName]))
+    // if (!functions.contains( functions.Get_First_Variable_Name(document.lineAt(position.line).text.substring(0,position.character)),['this' , FileName]))
+    let line = (document.lineAt(position.line).text.substring(0,position.character).trim());
+    if ((document.lineAt(position.line).text.substring(0,position.character).trim())!='!this.'&&(document.lineAt(position.line).text.substring(0,position.character).trim())!= '!!'+FileName+'.')
         return methods;
     var lines = document.getText().split('\n');
     for (var i = 0; i < lines.length; i++) {
