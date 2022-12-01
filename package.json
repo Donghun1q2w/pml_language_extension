@@ -5,11 +5,11 @@
 	"version": "0.3.3",
 	"publisher": "donghunlee",
 	"repository": {
-		"url": "https://github.com/Donghun1q2w/pml_vscode_extension"
+		"url": "https://github.com/Donghun1q2w/pml_language_extension"
 	},
-	"homepage": "https://github.com/Donghun1q2w/pml_vscode_extension",
+	"homepage": "https://github.com/Donghun1q2w/pml_language_extension",
 	"bugs": {
-		"url": "https://github.com/Donghun1q2w/pml_vscode_extension/issues"
+		"url": "https://github.com/Donghun1q2w/pml_language_extension/issues"
 	},
 	"engines": {
 		"vscode": "^1.29.1"
