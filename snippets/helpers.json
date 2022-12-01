@@ -12,5 +12,179 @@
             "!!alert.${1|message,warning,error,confirm,question,input|}(${2})"
         ],
         "description": "Helper for !!alert global function"
+    },
+    "DofromToby": {
+        "prefix": "DofromToby",
+        "body": [
+            "do !${1} from ${2} to ${3} by ${4|1|}",
+            "\t${0}",
+            "enddo"
+        ],
+        "description": "Template for Do syntax"
+    },
+    "DofromTo": {
+        "prefix": "DofromTo",
+        "body": [
+            "do !${1} from ${2} to ${3}",
+            "\t${0}",
+            "enddo"
+        ],
+        "description": "Template for Do syntax"
+    },
+    "DoTo": {
+        "prefix": "DoTo",
+        "body": [
+            "do !${1} to ${2}",
+            "\t${0}",
+            "enddo"
+        ],
+        "description": "Template for Do syntax"
+    },
+    "Dovalues": {
+        "prefix": "Dovalues",
+        "body": [
+            "do !${1} values !${2}",
+            "\t${0}",
+            "enddo"
+        ],
+        "description": "Template for Do syntax"
+    },
+    "DoIndices": {
+        "prefix": "DoIndices",
+        "body": [
+            "do !${1} indices !${2}",
+            "\t${0}",
+            "enddo"
+        ],
+        "description": "Template for Do syntax"
+    },
+    "if": {
+        "prefix": "if",
+        "body": [
+            "if ( ${1} ) then",
+            "\t${0}",
+            "endif"
+        ],
+        "description": "Template for if syntax"
+    },
+    "elseif": {
+        "prefix": "elseif",
+        "body": [
+            "elseif ( ${1} ) then"
+        ],
+        "description": "Template for if syntax"
+    },
+    "handle": {
+        "prefix": "handle",
+        "body": [
+            "handle ${1|any,()|}${0}",
+            "endhandle"
+        ],
+        "description": "Template for handler syntax"
+    },
+    "elsehandle": {
+        "prefix": "elsehandle",
+        "body": [
+            "elsehandle ${1|none,()|}"
+        ],
+        "description": "Template for handler syntax"
+    }
+    ,
+    "matchwild": {
+        "prefix": "matchwildpml1",
+        "body": [
+            "matchwild( ${1} , ${2} )${0}"
+        ],
+        "description": "Template for string method syntax"
+    },
+    "substring3para": {
+        "prefix": "substring_3para_pml1",
+        "body": [
+            "substring( ${1} , ${2} , ${3} )${0}"
+        ],
+        "description": "Template for string method syntax"
+    },
+    "substring2para": {
+        "prefix": "substring_2para_pml1",
+        "body": [
+            "substring( ${1} , ${2} )${0}"
+        ],
+        "description": "Template for string method syntax"
+    },
+    "part3para": {
+        "prefix": "part_3para_pml1",
+        "body": [
+            "part( ${1} , ${2} , ${3} )${0}"
+        ],
+        "description": "Template for string method syntax"
+    },
+    "part2para": {
+        "prefix": "part_2para_pml1",
+        "body": [
+            "part( ${1} , ${2} )${0}"
+        ],
+        "description": "Template for string method syntax"
+    },
+    "iftrue": {
+        "prefix": "iftrue",
+        "body": [
+            "iftrue( ${1} , ${2} , ${3} )${0}"
+        ],
+        "description": "Template for logical function"
+    }
+    ,
+    "modified": {
+        "prefix": "modified",
+        "body": [
+            "modified( ${1} )${0}"
+        ],
+        "description": "emplate for logical function"
+    }
+    ,
+    "defined": {
+        "prefix": "defined",
+        "body": [
+            "defined( ${1} )${0}"
+        ],
+        "description": "emplate for logical function"
+    }
+    ,
+    "badref": {
+        "prefix": "badref",
+        "body": [
+            "badref( ${1} )${0}"
+        ],
+        "description": "emplate for logical function"
+    }
+    ,
+    "unset": {
+        "prefix": "unset",
+        "body": [
+            "unset( ${1} )${0}"
+        ],
+        "description": "emplate for logical function"
+    }
+    ,
+    "deleted": {
+        "prefix": "deleted",
+        "body": [
+            "deleted( ${1} )${0}"
+        ],
+        "description": "emplate for logical function"
+    }
+    ,
+    "empty": {
+        "prefix": "empty",
+        "body": [
+            "empty( ${1} )${0}"
+        ],
+        "description": "emplate for logical function"
+    },
+    "undefined": {
+        "prefix": "undefined",
+        "body": [
+            "undefined( ${1} )${0}"
+        ],
+        "description": "emplate for logical function"
     }
 }

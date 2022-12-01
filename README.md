@@ -32,9 +32,16 @@
 - **`using namespace`** : 자주 사용하는 namespace를 추천
 
 ### 코드 자동완성 기능
-
+해당기능이 활성화 안될 경우 Ctrl + Space키를 누름
 - PML object(string, real, array 등)들에 대해 메소드 자동 완성 기능 제공
-  ![Animation](https://user-images.githubusercontent.com/90903869/179336718-c9c04a61-ab46-4473-af82-34391664b265.gif)
-  ![Animation1](https://user-images.githubusercontent.com/90903869/179336727-04e6900e-4c2b-456f-8cac-143c34c68384.gif)
-- 기본적인 코드 완성 기능 제공
+  ![pmleditorpeview4](https://user-images.githubusercontent.com/90903869/204969268-6845efec-44f0-401f-b46a-9c92b5881cc0.gif)
+
+- 작성된 변수를 인식하여 object에 해당하는 method 리스팅 및 매개변수 정보 제공
+  ![pmlediterpreview](https://user-images.githubusercontent.com/90903869/204967771-2d223240-3cf1-408e-9758-9ba61427fdf4.gif)
+  ![pmlediterpreview2](https://user-images.githubusercontent.com/90903869/204968069-6339d991-76b9-4100-9dbd-3086fa6a7622.gif)
+  
+  do, if, handle 및 logical function 등에 대한 자동완성 기능 제공(누락된 부분 추가 요청 바람)
+![pmleditorpreview3](https://user-images.githubusercontent.com/90903869/204968609-cc9f8931-fd6a-41f4-a13f-7a912a771058.gif)
+
+
 

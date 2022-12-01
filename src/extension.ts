@@ -108,15 +108,27 @@ class GetObjectList{
         FileType.Form=file.Form;
         FileType.Func=file.Func;
         FileType.Object=file.Object;
-        methods = Get_Attributes_Methods_of_Document(document,position,token,context);
+        methods = Get_object_list_for_definition(document,position,token,context);
         if ( methods.length!=0)return methods;
         if(line!=position.line)
             variables=get_AllVariables(position.line);
         line = position.line;
+        methods = Get_Attributes_Methods_of_Document(document,position,token,context);
+        if ( methods.length!=0)return methods;
         methods = Get_Method_of_All_Variables(document,position,token,context,variables);
         return methods;
     }
 }
+function Get_object_list_for_definition(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext){
+    let methods: Array<vscode.CompletionItem> = [];
+    let line = (document.lineAt(position.line).text.substring(0,position.character).trim());
+    if (!(/![!]*[a-z][a-z0-9]*.*[a-z]*[a-z0-9]*\s*=\s*object\s*/gi.test(line))) return methods;
+    for(var i = 0; i < objectlist.length;i++){
+        methods.push(new vscode.CompletionItem(objectlist[i],vscode.CompletionItemKind.Class));
+    }
+    return methods;
+}
+
 function Get_Attributes_Methods_of_Document(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext) {
     let methods: Array<vscode.CompletionItem> = [];
     // if (!functions.contains( functions.Get_First_Variable_Name(document.lineAt(position.line).text.substring(0,position.character)),['this' , FileName]))
@@ -239,19 +251,20 @@ function GetMethodOutputType(document: vscode.TextDocument, position: vscode.Pos
         code = cha + code;
     }
     if (code.toLowerCase().replace('this.','')=='') type = FileType.Form ? 'form':'object';
+    let isglobal:boolean = /this.[a-z]/gi.test(code.toLowerCase());
     let methods:string[] = code.toLowerCase().replace('this.','').split('.');
         if (methods.length<2) type;
-    let initFilteredVar = variables.filter(varr=>varr.name.toLowerCase()==methods[0].toLowerCase());
+    let initFilteredVar = variables.filter(varr=>varr.name.toLowerCase()==methods[0].toLowerCase()&&varr.global==isglobal);
     if(initFilteredVar.length>0)type=initFilteredVar[0].type;
 
     if(methods[0].toLowerCase()=='ce'){type = 'dbref';}
     for(let i=1;i<methods.length-1;i++){
 
         if(methods[i].toLowerCase()=='unset'){ type = 'boolean';continue;}
-        let Atrribute_List = attributetable.filter(att=>att.name.toLowerCase()==methods[i].toLowerCase()&&att.from.toLowerCase()==type.toLowerCase());
+        let Atrribute_List = attributetable.filter(att=>att.name.toLowerCase()==methods[i].toLowerCase() && att.from.toLowerCase()==type.toLowerCase() );
         if(Atrribute_List.length==1) {type = Atrribute_List[0].object.toLowerCase();continue;}
 
-        let Method_List = methodtable.filter(met=>met.name.toLowerCase()==methods[i].toLowerCase()&&met.from.toLowerCase()==type.toLowerCase())
+        let Method_List = methodtable.filter(met=>met.name.toLowerCase()==methods[i].toLowerCase() && met.from.toLowerCase()==type.toLowerCase())
         if(Method_List.length==1) {type = Method_List[0].object.toLowerCase();continue;}
 
         let Object_List = dic.filter((dd: { library: string; })=>dd.library.toLowerCase()==type.toLowerCase());
@@ -350,15 +363,16 @@ function get_AllVariables(currentLineNo:number):varString[]{
 
     //in method to upper
     for(let i=currentLineNo ;i>=0;i--){
-        if(/^\s*define\s*method\s*.[a-z]*/gi.test(lines[i])||/^\s*endmethod\s*/gi.test(lines[i])) break;
+        
         if(functions.starts(lines[i] , fil) || /^[\s]*$/gi.test(lines[i])) continue;
         var lineContent = lines[i];
         console.log(lineContent);
         let vs = /[!]+[a-z][a-z0-9]*/gi.exec(lineContent);
         if(vs==null) continue;
         let variable = vs[0].replace(/!*/gi,'').replace(/\s*/g,'');
-        type = GetType(lineContent,variable.toLowerCase());
+        type = GetType(lineContent,variable.toLowerCase(),false);
         variables = AssignVar( variable ,type , 0 , document.document.lineCount ,/^!!/g.test(vs[0]), variables);
+        if(/^\s*define\s*method\s*.[a-z]*/gi.test(lines[i])||/^\s*endmethod\s*/gi.test(lines[i])) break;
     }
     //in method to upper
     // lower code is no need
@@ -367,7 +381,7 @@ function get_AllVariables(currentLineNo:number):varString[]{
 }
 
 
-function GetType(line:string,variableName:string){
+function GetType(line:string,variableName:string,isglobal:boolean){
     let type:string ='';
     let lineContent = line.replace( /\s*/gi , '').toLowerCase();
     var ArrayRegex = new RegExp("!" +variableName + "\\[\\$*!*\\w*\\d*\\]", 'g');
@@ -376,7 +390,7 @@ function GetType(line:string,variableName:string){
     if(gadgetSet.gadget!='')type = gadgetSet.formalName;
     if( type != '')
         return type;
-    type = functions.GetObject(lineContent,variableName,objectlist);
+    type = functions.GetObject(line.replace( /\s*/gi , '').toLowerCase(),variableName,objectlist);
 
     if( type != '')
      return type;
