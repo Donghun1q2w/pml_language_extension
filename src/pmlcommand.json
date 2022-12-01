@@ -1,0 +1,145 @@
+[
+	{
+		"command":"representation",
+		"methods":[
+			{ "commandName1":"Centreline",
+				"command1":"Centreline",
+				"value1":"on,off"
+			},
+			{ "commandName1":"Tube",
+				"command1":"Tube",
+				"value1":"on,off"
+			},
+			{ "commandName1":"Obstruct",
+				"command1":"Obstruct",
+				"value1":"on,off",
+				"method2":[
+					{ "commandName2":"Obstruction Translucency",
+							"command2":"Translucency"
+					}
+				]
+			},
+			{ "commandName1":"Insulation",
+				"command1":"Insulation",
+				"value1":"on,off",
+				"method2":[
+					{ "commandName2":"Insulation Translucency",
+						"command2":"Translucency"
+					}
+				]
+			},
+			{ "commandName1":"Profile",
+				"command1":"Profile",
+				"value1":"on,off",
+				"method2":[
+					{ "commandName2":"Profile",
+						"command2":"Profile"
+					}
+				]
+			},
+			{ "commandName1":"Hole",
+				"command1":"Hole",
+				"value1":"on,off"
+			},
+			{ "commandName1":"Ppoints",
+				"command1":"",
+				"value1":"on,off"
+			},
+			{ "commandName1":"Ppoint Length",
+				"command1":""
+			},
+			{ "commandName1":"Ppoint Numbers",
+				"command1":""
+			},
+			{ "commandName1":"level",
+				"command1":""
+			},
+			{ "commandName1":"level PIPE",
+				"command1":""
+			},
+			{ "commandName1":"level NOZZ",
+				"command1":""
+			},
+			{ "commandName1":"level STRU",
+				"command1":""
+			},
+			{ "commandName1":"Mass Properties Detail level",
+				"command1":""
+			},
+			{ "commandName1":"level CABLE",
+				"command1":""
+			},
+			{ "commandName1":"Display Arctolerance",
+				"command1":""
+			},
+			{ "commandName1":"Massproperty Arctolerance",
+				"command1":""
+			},
+			{ "commandName1":"Pnode",
+				"command1":""
+			},
+			{ "commandName1":"Pnode size",
+				"command1":""
+			},
+			{ "commandName1":"Pnode colour",
+				"command1":""
+			},
+			{ "commandName1":"Snode",
+				"command1":""
+			},
+			{ "commandName1":"Snode size",
+				"command1":""
+			},
+			{ "commandName1":"Snode colour",
+				"command1":""
+			},
+			{ "commandName1":"Points",
+				"command1":""
+			},
+			{ "commandName1":"Pline",
+				"command1":""
+			},
+			{ "commandName1":"Pline length",
+				"command1":""
+			},
+			{ "commandName1":"Pkey",
+				"command1":""
+			},
+			{ "commandName1":"Hatta",
+				"command1":""
+			},
+			{ "commandName1":"Hatta size",
+				"command1":""
+			},
+			{ "commandName1":"Hatta colour",
+				"command1":""
+			},
+			{ "commandName1":"Ratta",
+				"command1":""
+			},
+			{ "commandName1":"Ratta size",
+				"command1":""
+			},
+			{ "commandName1":"Ratta colour",
+				"command1":""
+			},
+			{ "commandName1":"Rnode",
+				"command1":""
+			},
+			{ "commandName1":"Rnode size",
+				"command1":""
+			},
+			{ "commandName1":"Rnode colour",
+				"command1":""
+			},
+			{ "commandName1":"Centreline",
+				"command1":""
+			},
+			{ "commandName1":"Tracing",
+				"command1":""
+			},
+			{ "commandName1":"Bolt Hole",
+			"command1":""}
+		]
+	}
+]
