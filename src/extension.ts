@@ -47,10 +47,11 @@ class PmlSignatureHelpProvider implements vscode.SignatureHelpProvider {
             if(line!=position.line)
                 variables=get_AllVariables(position.line);
             line = position.line;
+            var testreg = new RegExp(/\s*![!]*[a-z][a-z0-9]*\s*=\s*object\s*[a-z][a-z0-9]*\(/gi);
+            if(testreg.test(document.lineAt(position.line).text.toLocaleLowerCase())){
+                variables=get_AllVariables(position.line);
+            }
             let a = new vscode.SignatureHelp();
-            // if(!isInnerBracket(document.lineAt(position.line).text.substring(0,position.character))){
-            //     return resolve(a);
-            // }
             let bracketSet:number[] = functions.GetPositionInterStringBracket(document.lineAt(position.line).text);
             let ArgInfo = functions.getCurrentStage(document.lineAt(position.line).text , position.character ,bracketSet);
             return new Promise((resolve)=>{
@@ -108,6 +109,7 @@ class GetObjectList{
         FileType.Form=file.Form;
         FileType.Func=file.Func;
         FileType.Object=file.Object;
+        
         methods = Get_object_list_for_definition(document,position,token,context);
         if ( methods.length!=0)return methods;
         if(line!=position.line)
@@ -234,7 +236,7 @@ function Get_Method_of_All_Variables(document: vscode.TextDocument, position: vs
 
 }
 function GetMethodOutputType(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext|undefined,variables:varString[],isInternalBracket:boolean,bracketSet:number[]):{ Type:string;Methods:string[] }{
-    var cont = document.lineAt(position.line).text.substring(0,position.character);
+    var cont = document.lineAt(position.line).text.substring(0,position.character).replace(/\s*=\s*object\s*/gi,'.');
     let code = "";
     let type = '';
     let bracket1 = 0; // (
@@ -251,8 +253,8 @@ function GetMethodOutputType(document: vscode.TextDocument, position: vscode.Pos
         code = cha + code;
     }
     if (code.toLowerCase().replace('this.','')=='') type = FileType.Form ? 'form':'object';
-    let isglobal:boolean = /this.[a-z]/gi.test(code.toLowerCase());
-    let methods:string[] = code.toLowerCase().replace('this.','').split('.');
+    let isglobal:boolean = /this.[a-z]/gi.test(code.toLowerCase())||/[!]{2}/gi.test(code.toLowerCase());
+    let methods:string[] = code.toLowerCase().replace('this.','').replace('object' ,'').trim().split('.');
         if (methods.length<2) type;
     let initFilteredVar = variables.filter(varr=>varr.name.toLowerCase()==methods[0].toLowerCase()&&varr.global==isglobal);
     if(initFilteredVar.length>0)type=initFilteredVar[0].type;
@@ -347,7 +349,7 @@ function get_AllVariables(currentLineNo:number):varString[]{
                 var variable = inputList[l].trim().split(' ')[0].replace('!','').trim();
                 type = inputList[l].trim().split(' ')[2].replace('!','').trim().toLowerCase();
                 if(objectlist.some((objectname: string)=>objectname==type.toLowerCase() ))
-                    variables = AssignVar( variable ,type , 0 , 1000 ,true, variables);
+                    variables = AssignVar( variable ,type , 0 , 1000 ,false, variables);
             }
         }
         if(output!='')
@@ -358,6 +360,16 @@ function get_AllVariables(currentLineNo:number):varString[]{
             if( type!=''){
                 variables = AssignVar( variable ,type , 0 , 1000 ,true, variables);
             }
+        }
+    }
+    var get_function_parameters = lines.filter(line=>/^\s*define\s*function\s*!![a-z0-9]*\s*\(/gi.test(line)).map(ll=>{return ll.replace(/\s+/gi,' ').replace( /\\r/gi ,'').replace(/^\s*define\s*function\s*!![a-z0-9]*\s*\(/gi,'').split(')')[0].trim()});
+    if(get_function_parameters.length==1){
+        let paras:string[] = get_function_parameters[0].split(',');
+        for( let i=0;i<paras.length;i++){
+            type = '';
+            var variable = paras[i].trim().split(' ')[0].replace('!','').toLowerCase();
+            type = paras[i].trim().split(' ')[2].toLowerCase();
+            variables = AssignVar( variable ,type , 0 , 1000 ,false, variables);
         }
     }
 
@@ -371,6 +383,15 @@ function get_AllVariables(currentLineNo:number):varString[]{
         if(vs==null) continue;
         let variable = vs[0].replace(/!*/gi,'').replace(/\s*/g,'');
         type = GetType(lineContent,variable.toLowerCase(),false);
+        if(type==''&&/![!]*[a-z][a-z0-9]*\s*=\s*![!]*[a-z][a-z0-9]*/gi.test(lineContent.toLowerCase().trim().replace('/r',''))){
+            let oldvar:string = lineContent.replace('/r','').split('=')[1].replace('!','').toLowerCase().trim();
+            let chkglobal_oldvar:boolean = /this./gi.test(oldvar);
+            if(chkglobal_oldvar)
+                oldvar = oldvar.replace(/this./gi,'');
+            let findtype:varString[] = variables.filter(variable=>variable.name===oldvar&&variable.global===chkglobal_oldvar);
+            if(findtype.length>0)
+                type = findtype[0].type;
+        }
         variables = AssignVar( variable ,type , 0 , document.document.lineCount ,/^!!/g.test(vs[0]), variables);
         if(/^\s*define\s*method\s*.[a-z]*/gi.test(lines[i])||/^\s*endmethod\s*/gi.test(lines[i])) break;
     }
