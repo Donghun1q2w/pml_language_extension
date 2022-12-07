@@ -15,7 +15,8 @@
 				"value1":"on,off",
 				"method2":[
 					{ "commandName2":"Obstruction Translucency",
-							"command2":"Translucency"
+							"command2":"Translucency",
+							"value2":"1:99"
 					}
 				]
 			},
@@ -24,16 +25,34 @@
 				"value1":"on,off",
 				"method2":[
 					{ "commandName2":"Insulation Translucency",
-						"command2":"Translucency"
+						"command2":"Translucency",
+						"value2":"1:99"
 					}
 				]
 			},
 			{ "commandName1":"Profile",
 				"command1":"Profile",
-				"value1":"on,off",
+				"value1":",on,off",
 				"method2":[
-					{ "commandName2":"Profile",
-						"command2":"Profile"
+					{ "commandName2":"Obstruct",
+						"command2":"Obstruct",
+						"value2":"on,off",
+						"method3":[
+							{ "commandName3":"Obstruction Translucency",
+									"command3":"Translucency",
+									"value3":"1:99"
+							}
+						]
+					},
+					{ "commandName2":"Insulation",
+						"command2":"Insulation",
+						"value2":"on,off",
+						"method3":[
+							{ "commandName3":"Insulation Translucency",
+								"command3":"Translucency",
+								"value3":"1:99"
+							}
+						]
 					}
 				]
 			},
@@ -43,13 +62,29 @@
 			},
 			{ "commandName1":"Ppoints",
 				"command1":"",
+				"value1":"on,off",
+				"method2" :[
+						{
+							"commandName2":"Ppoint Length",
+							"command2":"length",
+							"value2":"on,off"
+						},
+						{
+							"commandName2":"Ppoint Numbers",
+							"command2":"numbers",
+							"value2":"on,off"
+						}
+				]
+			},
+			{
+				"commandName1":"Ppoint Length",
+				"command1":"length",
 				"value1":"on,off"
 			},
-			{ "commandName1":"Ppoint Length",
-				"command1":""
-			},
-			{ "commandName1":"Ppoint Numbers",
-				"command1":""
+			{
+				"commandName1":"Ppoint Numbers",
+				"command1":"numbers",
+				"value1":"on,off"
 			},
 			{ "commandName1":"level",
 				"command1":""
