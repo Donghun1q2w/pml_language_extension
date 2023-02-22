@@ -6,6 +6,7 @@ import methodtable from './methodtable.json'
 import attributetable from './attributetable.json'
 import dictionary from './dictionary.json'
 import dictionary_inhouse from './dictionary_inhouse.json'
+import att_inhouse from './attributetable_inhouse.json'
 import * as functions from './functions'
 var dic:any = dictionary
 class varString{ name: string=""; type: string = ""; from: Number=0   ; to: Number| null=null; global: Boolean=false;}
@@ -20,6 +21,9 @@ export function activate(Context: vscode.ExtensionContext) {
     // vscode.workspace.onDidChangeTextDocument(parseKeys);
     dictionary_inhouse.forEach(function(im){
         dic.push(im);
+    });
+    att_inhouse.forEach(function(im){
+        attributetable.push(im);
     });
     objectlist = (dic as any).map((dic: { library: string; })=>dic.library.toLowerCase());
     registerProviders(Context, variables);
@@ -232,6 +236,12 @@ function Get_Method_of_All_Variables(document: vscode.TextDocument, position: vs
         Methods.push(new vscode.CompletionItem('Unset',vscode.CompletionItemKind.Method))
         Methods[Methods.length-1].insertText = new vscode.SnippetString('Unset')
         Methods[Methods.length-1].documentation = functions.SetMarkdown('(method ) Unset(): boolean', 'check is unset');
+        Methods.push(new vscode.CompletionItem('Set',vscode.CompletionItemKind.Method))
+        Methods[Methods.length-1].insertText = new vscode.SnippetString('Set')
+        Methods[Methods.length-1].documentation = functions.SetMarkdown('(method ) Set(): boolean', 'check is set');
+        Methods.push(new vscode.CompletionItem('ObjectType',vscode.CompletionItemKind.Method))
+        Methods[Methods.length-1].insertText = new vscode.SnippetString('ObjectType')
+        Methods[Methods.length-1].documentation = functions.SetMarkdown('(method ) ObjectType(): String', 'check is object type');
     return Methods;
 
 }
@@ -254,7 +264,7 @@ function GetMethodOutputType(document: vscode.TextDocument, position: vscode.Pos
     }
     if (code.toLowerCase().replace('this.','')=='') type = FileType.Form ? 'form':'object';
     let isglobal:boolean = /this.[a-z]/gi.test(code.toLowerCase())||/[!]{2}/gi.test(code.toLowerCase());
-    let methods:string[] = code.toLowerCase().replace('this.','').replace('object' ,'').trim().split('.');
+    let methods:string[] = code.toLowerCase().replace('this.','').replace(/object\s/gi ,'').trim().split('.');
         if (methods.length<2) type;
     let initFilteredVar = variables.filter(varr=>varr.name.toLowerCase()==methods[0].toLowerCase()&&varr.global==isglobal);
     if(initFilteredVar.length>0)type=initFilteredVar[0].type;
@@ -263,6 +273,8 @@ function GetMethodOutputType(document: vscode.TextDocument, position: vscode.Pos
     for(let i=1;i<methods.length-1;i++){
 
         if(methods[i].toLowerCase()=='unset'){ type = 'boolean';continue;}
+        if(methods[i].toLowerCase()=='set'){ type = 'boolean';continue;}
+        if(methods[i].toLowerCase()=='objecttype'){ type = 'string';continue;}
         let Atrribute_List = attributetable.filter(att=>att.name.toLowerCase()==methods[i].toLowerCase() && att.from.toLowerCase()==type.toLowerCase() );
         if(Atrribute_List.length==1) {type = Atrribute_List[0].object.toLowerCase();continue;}
 
@@ -429,10 +441,14 @@ function GetType(line:string,variableName:string,isglobal:boolean){
     }
     else if (lineContent.includes('!' + variableName + '=true')
     || lineContent.includes('!' + variableName + '=false')
+    || lineContent.includes('!' + variableName + '=yes')
+    || lineContent.includes('!' + variableName + '=no')
     || lineContent.includes('!' + variableName + '=T')
     || lineContent.includes('!' + variableName + '=F')
     || lineContent.includes('!' + variableName + '=undefined(')
     || lineContent.includes('!' + variableName + '=defined(')
+    || lineContent.includes('!' + variableName + '=set(')
+    || lineContent.includes('!' + variableName + '=unset(')
     || (lineContent.startsWith('!' + variableName + '=')&&methodtable.some(method=>method.object.toLocaleLowerCase()=="boolean"&&chkmethod(lineContent,method.name)))
     || (lineContent.startsWith('!' + variableName + '=')&&attributetable.some(attribute=>attribute.object.toLocaleLowerCase()=="boolean"&&chkatt(lineContent,attribute.name.toLocaleLowerCase())))
     ) {
