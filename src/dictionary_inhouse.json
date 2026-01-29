@@ -1,6 +1,6 @@
 [
 	{
-		"library": "General",
+		"library": "general",
 		"methods": [
 			{
 				"label": "handle()",

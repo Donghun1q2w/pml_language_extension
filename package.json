@@ -101,7 +101,20 @@
 			{
 				"language": "pml"
 			}
-		]
+		],
+		"configuration": {
+			"title": "PML Extension",
+			"properties": {
+				"pml.customDictionaryPaths": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"default": [],
+					"description": "사용자 정의 dictionary JSON 파일 경로 목록. dictionary.json과 동일한 형식의 파일을 지정하세요."
+				}
+			}
+		}
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
@@ -111,11 +124,11 @@
 	},
 	"devDependencies": {
 		"@types/mocha": "^2.2.42",
-		"@types/node": "^8.10.60",
+		"@types/node": "^25.0.9",
 		"@types/vscode": "^1.29.1",
 		"eslint": "^5.16.0",
 		"tslint": "^5.20.1",
-		"typescript": "^3.8.3"
+		"typescript": "^5.9.3"
 	},
 	"__metadata": {
 		"installedTimestamp": 1639631357638,

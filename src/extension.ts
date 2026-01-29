@@ -1,6 +1,8 @@
 'use strict';
 
 import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as path from 'path';
 import Uglifier from './Uglifier'
 import methodtable from './methodtable.json'
 import attributetable from './attributetable.json'
@@ -8,7 +10,7 @@ import dictionary from './dictionary.json'
 import dictionary_inhouse from './dictionary_inhouse.json'
 import att_inhouse from './attributetable_inhouse.json'
 import * as functions from './functions'
-var dic:any = dictionary
+var dic: any[] = (dictionary as any[]).slice()
 class varString{ name: string=""; type: string = ""; from: Number=0   ; to: Number| null=null; global: Boolean=false;}
 var variables:varString[]=[];
 var objectlist:string[];
@@ -25,6 +27,19 @@ export function activate(Context: vscode.ExtensionContext) {
     att_inhouse.forEach(function(im){
         attributetable.push(im);
     });
+
+    // 사용자 정의 dictionary 로드
+    loadCustomDictionaries();
+
+    // 설정 변경 시 다시 로드
+    Context.subscriptions.push(
+        vscode.workspace.onDidChangeConfiguration(e => {
+            if (e.affectsConfiguration('pml.customDictionaryPaths')) {
+                reloadDictionaries();
+            }
+        })
+    );
+
     objectlist = (dic as any).map((dic: { library: string; })=>dic.library.toLowerCase());
     registerProviders(Context, variables);
     registerCommands(Context)
@@ -32,17 +47,55 @@ export function activate(Context: vscode.ExtensionContext) {
         vscode.languages.registerSignatureHelpProvider(
             'pml', new PmlSignatureHelpProvider(),'(' ,','));
 }
-function registerCommands(Context: vscode.ExtensionContext) {
-    let subscriptions = Context.subscriptions;
-    let langs = vscode.languages;
-    subscriptions.push(Uglifier);
+
+function loadCustomDictionaries() {
+    const config = vscode.workspace.getConfiguration('pml');
+    const customPaths: string[] = config.get('customDictionaryPaths') || [];
+
+    for (const customPath of customPaths) {
+        try {
+            let resolvedPath = customPath;
+
+            // 상대 경로인 경우 워크스페이스 기준으로 해석
+            if (!path.isAbsolute(customPath) && vscode.workspace.workspaceFolders) {
+                resolvedPath = path.join(vscode.workspace.workspaceFolders[0].uri.fsPath, customPath);
+            }
+
+            if (fs.existsSync(resolvedPath)) {
+                const content = fs.readFileSync(resolvedPath, 'utf-8');
+                const customDic = JSON.parse(content);
+
+                if (Array.isArray(customDic)) {
+                    customDic.forEach(item => dic.push(item));
+                    console.log(`PML: Loaded custom dictionary from ${resolvedPath}`);
+                }
+            } else {
+                console.warn(`PML: Custom dictionary not found: ${resolvedPath}`);
+            }
+        } catch (error) {
+            console.error(`PML: Failed to load custom dictionary from ${customPath}:`, error);
+        }
+    }
 }
 
-function registerProviders(Context: vscode.ExtensionContext, knownVariables: any) {
-    let subscriptions = Context.subscriptions;
-    let langs = vscode.languages;
-    subscriptions.push(langs.registerCompletionItemProvider("pml", new GetObjectList(),'.' , ''));
-    subscriptions.push(langs.registerDocumentSymbolProvider("pml", new PmlDocumentSymbolProvider() ));
+function reloadDictionaries() {
+    // dictionary 초기화 후 다시 로드
+    dic = (dictionary as any[]).slice();
+    dictionary_inhouse.forEach(function(im){
+        dic.push(im);
+    });
+    loadCustomDictionaries();
+    objectlist = dic.map((d: { library: string; }) => d.library.toLowerCase());
+    vscode.window.showInformationMessage('PML: Dictionary reloaded');
+}
+function registerCommands(Context: vscode.ExtensionContext) {
+    Context.subscriptions.push(Uglifier);
+}
+
+function registerProviders(Context: vscode.ExtensionContext, _knownVariables: any) {
+    const subscriptions = Context.subscriptions;
+    subscriptions.push(vscode.languages.registerCompletionItemProvider("pml", new GetObjectList(),'.' , ''));
+    subscriptions.push(vscode.languages.registerDocumentSymbolProvider("pml", new PmlDocumentSymbolProvider() ));
 }
 class PmlSignatureHelpProvider implements vscode.SignatureHelpProvider {
     public provideSignatureHelp(
@@ -70,7 +123,6 @@ class PmlSignatureHelpProvider implements vscode.SignatureHelpProvider {
                         .map((method: { label: string; snippet: string ; md: string ; }) => {
                         let item = new vscode.SignatureInformation(method.snippet.replace(/\$\{\s*\d*\s*\:/gi,'').replace(/\}/gi,''));
                         item.parameters = functions.getInputParameter(method.snippet , method.md , ArgInfo.CurrentArgumentStage-1);
-                        item.parameters
                         return item;
                     });
                 a.signatures = tempMethods;
@@ -79,10 +131,9 @@ class PmlSignatureHelpProvider implements vscode.SignatureHelpProvider {
     }
 }
 class PmlDocumentSymbolProvider implements vscode.DocumentSymbolProvider {
-    public provideDocumentSymbols(document: vscode.TextDocument, token: vscode.CancellationToken): Thenable<vscode.SymbolInformation[]> {
+    public provideDocumentSymbols(document: vscode.TextDocument, _token: vscode.CancellationToken): Thenable<vscode.SymbolInformation[]> {
         return new Promise((resolve, reject) => {
             var symbols: any[] = [];
-            token = token;
             for (var i = 0; i < document.lineCount; i++) {
                 var line = document.lineAt(i);
                 let lineTrimmed: string = line.text.trim();
@@ -230,18 +281,26 @@ function Get_Method_of_All_Variables(document: vscode.TextDocument, position: vs
     for(let k=0;k<tempMethods.length;k++){
         if(methodlist.some(mm=>mm==tempMethods[k].label.toLowerCase()))
             continue;
-            methodlist.push(tempMethods[k].label.toLowerCase());
+        methodlist.push(tempMethods[k].label.toLowerCase());
         Methods.push(tempMethods[k]);
     }
-        Methods.push(new vscode.CompletionItem('Unset',vscode.CompletionItemKind.Method))
-        Methods[Methods.length-1].insertText = new vscode.SnippetString('Unset')
-        Methods[Methods.length-1].documentation = functions.SetMarkdown('(method ) Unset(): boolean', 'check is unset');
-        Methods.push(new vscode.CompletionItem('Set',vscode.CompletionItemKind.Method))
-        Methods[Methods.length-1].insertText = new vscode.SnippetString('Set')
-        Methods[Methods.length-1].documentation = functions.SetMarkdown('(method ) Set(): boolean', 'check is set');
-        Methods.push(new vscode.CompletionItem('ObjectType',vscode.CompletionItemKind.Method))
-        Methods[Methods.length-1].insertText = new vscode.SnippetString('ObjectType')
-        Methods[Methods.length-1].documentation = functions.SetMarkdown('(method ) ObjectType(): String', 'check is object type');
+
+    // Add common methods: Unset, Set, ObjectType
+    const unsetItem = new vscode.CompletionItem('Unset', vscode.CompletionItemKind.Method);
+    unsetItem.insertText = new vscode.SnippetString('Unset');
+    unsetItem.documentation = functions.SetMarkdown('(method ) Unset(): boolean', 'check is unset');
+    Methods.push(unsetItem);
+
+    const setItem = new vscode.CompletionItem('Set', vscode.CompletionItemKind.Method);
+    setItem.insertText = new vscode.SnippetString('Set');
+    setItem.documentation = functions.SetMarkdown('(method ) Set(): boolean', 'check is set');
+    Methods.push(setItem);
+
+    const objectTypeItem = new vscode.CompletionItem('ObjectType', vscode.CompletionItemKind.Method);
+    objectTypeItem.insertText = new vscode.SnippetString('ObjectType');
+    objectTypeItem.documentation = functions.SetMarkdown('(method ) ObjectType(): String', 'check is object type');
+    Methods.push(objectTypeItem);
+
     return Methods;
 
 }
@@ -309,12 +368,10 @@ function get_AllVariables(currentLineNo:number):varString[]{
     if(objectlist==undefined)objectlist = (dic as any).map((dic: { library: any; })=>dic.library.toLowerCase());
     if (!vscode.window.activeTextEditor) return variables; // no editor
     let document:vscode.TextEditor = vscode.window.activeTextEditor;
-    var varString: varString;
-    const fil = ['--' , '\\$'  , '\\)\\$' , 'if' , 'handle' , 'endif' ,'endhandle' , 'usingname', 'else' , 'endif'  , 'exit' , 'finish' , 'enddo' ];
+    const skipPatterns = ['--' , '\\$'  , '\\)\\$' , 'if' , 'handle' , 'endif' ,'endhandle' , 'usingname', 'else' , 'endif'  , 'exit' , 'finish' , 'enddo' ];
     var lines = document.document.getText().split('\n');
     let type:string = '';
     let variableName:string = '';
-    var regex = /(?:^|[^!])!+(\w+)/g;
     
     //getMember of form or object
     for(let l in lines){
@@ -348,8 +405,8 @@ function get_AllVariables(currentLineNo:number):varString[]{
         }
     }
     //getMember of form or object
-    var get_Form_and_Object_Methods = lines.filter(line=>/^\s*define\s*method\s*\.[a-z][a-z0-9]*\s*\(/gi.test(line)).map(ll=>{
-        return ll.replace( /\\r/gi ,'').replace(/\s+/gi , ' ').replace(/\$\*[a-z 0-9.!@#$%^&*()_\-,<>/{}\\|";'?`~.+=]*/gi,'').trim();
+    var get_Form_and_Object_Methods = lines.filter(line=>/^\s*define\s*method\s*\.[a-z][a-z0-9]*\s*\(/gi.test(line)).map(methodLine=>{
+        return methodLine.replace( /\\r/gi ,'').replace(/\s+/gi , ' ').replace(/\$\*[a-z 0-9.!@#$%^&*()_\-,<>/{}\\|";'?`~.+=]*/gi,'').trim();
     });
     for(let i=0;i<get_Form_and_Object_Methods.length;i++){
         var input = get_Form_and_Object_Methods[i].split('(')[1].split(')')[0];
@@ -374,7 +431,7 @@ function get_AllVariables(currentLineNo:number):varString[]{
             }
         }
     }
-    var get_function_parameters = lines.filter(line=>/^\s*define\s*function\s*!![a-z0-9]*\s*\(/gi.test(line)).map(ll=>{return ll.replace(/\s+/gi,' ').replace( /\\r/gi ,'').replace(/^\s*define\s*function\s*!![a-z0-9]*\s*\(/gi,'').split(')')[0].trim()});
+    var get_function_parameters = lines.filter(line=>/^\s*define\s*function\s*!![a-z0-9]*\s*\(/gi.test(line)).map(funcLine=>{return funcLine.replace(/\s+/gi,' ').replace( /\\r/gi ,'').replace(/^\s*define\s*function\s*!![a-z0-9]*\s*\(/gi,'').split(')')[0].trim()});
     if(get_function_parameters.length==1){
         let paras:string[] = get_function_parameters[0].split(',');
         for( let i=0;i<paras.length;i++){
@@ -388,7 +445,7 @@ function get_AllVariables(currentLineNo:number):varString[]{
     //in method to upper
     for(let i=currentLineNo ;i>=0;i--){
         
-        if(functions.starts(lines[i] , fil) || /^[\s]*$/gi.test(lines[i])) continue;
+        if(functions.starts(lines[i] , skipPatterns) || /^[\s]*$/gi.test(lines[i])) continue;
         var lineContent = lines[i];
         console.log(lineContent);
         let vs = /[!]+[a-z][a-z0-9]*/gi.exec(lineContent);
@@ -625,11 +682,4 @@ function chkatt( line :string , attName : string ) : boolean {
     var chkatt = /[a-zA-Z]$/g;
     if(!chkatt.test(modifiedLine)) return result;
     return modifiedLine.endsWith('.' + attName.toLocaleLowerCase());
-}
-function endsWithAny(suffixes: any, string: string, delim: string) {
-    for (let suffix of suffixes) {
-        if (string.endsWith(suffix + delim))
-            return true;
-    }
-    return false;
 }

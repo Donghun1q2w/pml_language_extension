@@ -7,8 +7,9 @@
 		"strict": true,
 		"rootDir": "src",
 		"resolveJsonModule": true,
-		"moduleResolution": "node",
-		"esModuleInterop": true
+		"moduleResolution": "node10",
+		"esModuleInterop": true,
+		"ignoreDeprecations": "5.0"
 	},
 	"exclude": ["node_modules", ".vscode-test"]
 }

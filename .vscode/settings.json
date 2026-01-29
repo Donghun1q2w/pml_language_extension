@@ -1,3 +1,7 @@
 {
-	"editor.insertSpaces": false
+	"editor.insertSpaces": false,
+    "pml.customDictionaryPaths": [
+        "/절대경로/custom-dictionary.json",
+        "relative/path/custom.json"
+    ]
 }

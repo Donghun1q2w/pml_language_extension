@@ -186,5 +186,12 @@
             "undefined( ${1} )${0}"
         ],
         "description": "emplate for logical function"
+    },
+    "!!collectallfor": {
+        "prefix": "!!collectallfor",
+        "body": [
+            "!!collectallfor( |${1}| , |${2}| , ${3|CE,/*,$!} )${0}"
+        ],
+        "description": "colelctallfor function"
     }
 }
