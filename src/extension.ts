@@ -53,27 +53,26 @@ function loadCustomDictionaries() {
     const customPaths: string[] = config.get('customDictionaryPaths') || [];
 
     for (const customPath of customPaths) {
+        let resolvedPath = customPath;
         try {
-            let resolvedPath = customPath;
-
             // 상대 경로인 경우 워크스페이스 기준으로 해석
             if (!path.isAbsolute(customPath) && vscode.workspace.workspaceFolders) {
                 resolvedPath = path.join(vscode.workspace.workspaceFolders[0].uri.fsPath, customPath);
             }
 
-            if (fs.existsSync(resolvedPath)) {
-                const content = fs.readFileSync(resolvedPath, 'utf-8');
-                const customDic = JSON.parse(content);
+            const content = fs.readFileSync(resolvedPath, 'utf-8');
+            const customDic = JSON.parse(content);
 
-                if (Array.isArray(customDic)) {
-                    customDic.forEach(item => dic.push(item));
-                    console.log(`PML: Loaded custom dictionary from ${resolvedPath}`);
-                }
-            } else {
-                console.warn(`PML: Custom dictionary not found: ${resolvedPath}`);
+            if (Array.isArray(customDic)) {
+                customDic.forEach(item => dic.push(item));
+                console.log(`PML: Loaded custom dictionary from ${resolvedPath}`);
             }
         } catch (error) {
-            console.error(`PML: Failed to load custom dictionary from ${customPath}:`, error);
+            if ((error as any)?.code === 'ENOENT') {
+                console.warn(`PML: Custom dictionary not found: ${resolvedPath}`);
+            } else {
+                console.error(`PML: Failed to load custom dictionary from ${customPath}:`, error);
+            }
         }
     }
 }
@@ -83,6 +82,9 @@ function reloadDictionaries() {
     dic = (dictionary as any[]).slice();
     dictionary_inhouse.forEach(function(im){
         dic.push(im);
+    });
+    att_inhouse.forEach(function(im){
+        attributetable.push(im);
     });
     loadCustomDictionaries();
     objectlist = dic.map((d: { library: string; }) => d.library.toLowerCase());
@@ -376,19 +378,19 @@ function get_AllVariables(currentLineNo:number):varString[]{
     //getMember of form or object
     for(let l in lines){
         let line = lines[l];
-        if( !/^\s*member\s*\.[a-z][a-z0-9]*/gi.test(line)&&functions.GettingGadget(line).gadget=='') continue;
+        let gadgetResult = functions.GettingGadget(line);
+        if( !/^\s*member\s*\.[a-z][a-z0-9]*/gi.test(line)&&gadgetResult.gadget=='') continue;
         else if( /^\s*define\s*method\s*./gi.test(line)) break;
-        
+
 
         if(/\$\*/gi.test(line))
             lineContent = line.replace(/\$\*[a-z 0-9.!@#$%^&*()_\-,<>/{}\\|";'?`~.+=]*/gi,'').replace(/\s+/g , ' ');
         else
             lineContent = line.replace(/\s+/g , ' ').trim();
-        console.log(lineContent);
         type = '';
         variableName = '';
-        
-        let vs = /member\s*\.[a-z][a-z0-9]*/gi.exec(lineContent); 
+
+        let vs = /member\s*\.[a-z][a-z0-9]*/gi.exec(lineContent);
         if(vs!=null){
             variableName = vs[0].replace( /member\s*\./gi ,'');
             type = lineContent.replace(new RegExp("\\s*member\\s*\\." + variableName + "\\s*is\\s*",'gi')  , '').trim().toLowerCase();
@@ -397,10 +399,10 @@ function get_AllVariables(currentLineNo:number):varString[]{
                 variables = AssignVar( variableName ,type , 0 , 1000 ,true, variables);
             }
         }
-        else if(functions.GettingGadget(line).gadget!=''){
+        else if(gadgetResult.gadget!=''){
             let gadgetName = /\.[a-z][a-z0-9]*/gi.exec(line);
             if(gadgetName!=null){
-                variables = AssignVar( gadgetName[0].substring(1) ,functions.GettingGadget(line).formalName , 0 , 1000 ,true, variables);
+                variables = AssignVar( gadgetName[0].substring(1) ,gadgetResult.formalName , 0 , 1000 ,true, variables);
             }
         }
     }
@@ -447,7 +449,6 @@ function get_AllVariables(currentLineNo:number):varString[]{
         
         if(functions.starts(lines[i] , skipPatterns) || /^[\s]*$/gi.test(lines[i])) continue;
         var lineContent = lines[i];
-        console.log(lineContent);
         let vs = /[!]+[a-z][a-z0-9]*/gi.exec(lineContent);
         if(vs==null) continue;
         let variable = vs[0].replace(/!*/gi,'').replace(/\s*/g,'');
